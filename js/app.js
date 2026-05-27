@@ -35,32 +35,6 @@ let state = {
   polyVerts:   [],        // accumulated polygon vertices
 };
 
-/* Continent hovered over the overview tiles (used by updateZoneOpacity) */
-let hoveredContinent = null;
-
-/**
- * Push updated fill-opacity / line-width onto the 'zones-fill' and
- * 'zones-line' layers to reflect the current hover + selected continent.
- * Called whenever hoveredContinent or state.continent changes.
- */
-function updateZoneOpacity() {
-  if (!map || !map.isStyleLoaded()) return;
-  const hov = hoveredContinent;
-  const sel = state.continent;
-
-  /* Build MapLibre case-expression for opacity */
-  const opExpr = ['case'];
-  if (hov) { opExpr.push(['==', ['get', 'continent'], hov],  0.45); }
-  if (sel) { opExpr.push(['==', ['get', 'continent'], sel],  0.50); }
-  opExpr.push(0.20);   // default
-
-  map.setPaintProperty('zones-fill', 'fill-opacity', opExpr);
-
-  /* Thicker border for selected continent */
-  map.setPaintProperty('zones-line', 'line-width',
-    sel ? ['case', ['==', ['get', 'continent'], sel], 2.5, 0.6] : 0.6
-  );
-}
 
 /* ── DOM refs ── */
 const $ = id => document.getElementById(id);
@@ -94,11 +68,12 @@ function initMap() {
 
 function onMapLoad() {
   /* ── GeoJSON sources ── */
-  // T6 tile mosaic — used for world-overview fill/click.
-  // Each feature has continent + color properties; no pole-encircling polygons.
+  // Canonical Equi7Grid 7-zone partition (spherical Voronoi based on AEQD
+  // origins).  Every point on Earth belongs to exactly one zone.
   map.addSource('zones', {
     type: 'geojson',
     data: emptyFC(),
+    promoteId: 'id',
   });
   // Fixed label points so continent names stay well-placed
   map.addSource('continent-labels', {
@@ -125,14 +100,19 @@ function onMapLoad() {
     data: emptyFC(),
   });
 
-  /* ── T6 overview tile layers ── */
+  /* ── Zone layers (canonical 7-zone partition) ── */
   map.addLayer({
     id: 'zones-fill',
     type: 'fill',
     source: 'zones',
     paint: {
       'fill-color': ['get', 'color'],
-      'fill-opacity': 0.20,   // updated dynamically via updateZoneOpacity()
+      'fill-opacity': [
+        'case',
+        ['boolean', ['feature-state', 'hover'],    false], 0.55,
+        ['boolean', ['feature-state', 'selected'], false], 0.60,
+        0.45,
+      ],
     },
   });
   map.addLayer({
@@ -140,9 +120,13 @@ function onMapLoad() {
     type: 'line',
     source: 'zones',
     paint: {
-      'line-color': ['get', 'color'],
-      'line-width': 0.6,      // updated dynamically via updateZoneOpacity()
-      'line-opacity': 0.65,
+      'line-color': '#ffffff',
+      'line-width': [
+        'case',
+        ['boolean', ['feature-state', 'selected'], false], 2.5,
+        1.2,
+      ],
+      'line-opacity': 0.7,
     },
   });
   /* Continent name labels (hardcoded points, better placement than polygon centroids) */
@@ -299,29 +283,32 @@ function onMapLoad() {
   });
 
   /* ── Map interactions ── */
+  let hoveredZoneId = null;
+
   map.on('mousemove', 'zones-fill', e => {
     if (state.drawMode) return;
     map.getCanvas().style.cursor = 'pointer';
-    const cont = e.features[0]?.properties?.continent;
-    if (cont !== hoveredContinent) {
-      hoveredContinent = cont;
-      updateZoneOpacity();
-    }
+    if (e.features.length === 0) return;
+    const id = e.features[0].properties.id;
+    if (id === hoveredZoneId) return;
+    if (hoveredZoneId)
+      map.setFeatureState({ source: 'zones', id: hoveredZoneId }, { hover: false });
+    hoveredZoneId = id;
+    map.setFeatureState({ source: 'zones', id }, { hover: true });
   });
 
   map.on('mouseleave', 'zones-fill', () => {
     if (state.drawMode) return;
     map.getCanvas().style.cursor = '';
-    if (hoveredContinent !== null) {
-      hoveredContinent = null;
-      updateZoneOpacity();
-    }
+    if (hoveredZoneId)
+      map.setFeatureState({ source: 'zones', id: hoveredZoneId }, { hover: false });
+    hoveredZoneId = null;
   });
 
   map.on('click', 'zones-fill', e => {
     if (state.drawMode) return;
-    const cont = e.features[0]?.properties?.continent;
-    if (cont) selectContinent(cont);
+    const id = e.features[0]?.properties?.id;
+    if (id) selectContinent(id);
   });
 
   /* drawing clicks */
@@ -334,24 +321,28 @@ function onMapLoad() {
     if (e.key === 'Escape') disableDrawMode();
   });
 
-  /* ── Load T6 tile mosaic for world overview ── */
-  fetch('data/overview_t6.geojson')
+  /* ── Load canonical Equi7Grid zone boundaries ── */
+  fetch('data/zones/e7_zones.geojson')
     .then(r => r.json())
     .then(data => map.getSource('zones').setData(data))
-    .catch(err => console.error('Failed to load overview tiles:', err));
+    .catch(err => console.error('Failed to load zones:', err));
 }
 
 /* ─────────── Continent selection ─────────── */
 function selectContinent(id) {
   if (state.continent === id) return;
 
+  // Deselect previous zone
+  if (state.continent)
+    map.setFeatureState({ source: 'zones', id: state.continent }, { selected: false });
+
   state.continent = id;
   state.tiling = currentTiling();
   state.aoi = null;
   state.intersecting = new Set();
 
-  // Update overview tile highlight; hide overview labels when zoomed in
-  updateZoneOpacity();
+  // Highlight selected zone; hide overview labels when zoomed in
+  map.setFeatureState({ source: 'zones', id }, { selected: true });
   map.setLayoutProperty('continent-labels', 'visibility', 'none');
 
   // Update sidebar buttons

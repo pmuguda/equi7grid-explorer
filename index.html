@@ -22,7 +22,15 @@
 
     <!-- CONTINENT SELECTOR -->
     <section class="panel-section">
-      <h2 class="section-title">1 · Select Continent</h2>
+      <div class="section-title-row">
+        <h2 class="section-title">1 · Select Continent</h2>
+        <button class="toggle-btn" id="btn-toggle-continents" aria-expanded="true" title="Show / hide continent buttons">
+          <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M3 5l5 5 5-5"/>
+          </svg>
+        </button>
+      </div>
+      <div id="continent-body">
       <p class="section-hint">Click a colored zone on the map or a button below.</p>
       <div class="continent-grid" id="continent-grid">
         <button class="cont-btn" data-id="AF">Africa</button>
@@ -33,6 +41,7 @@
         <button class="cont-btn" data-id="OC">Oceania</button>
         <button class="cont-btn" data-id="SA">S. America</button>
       </div>
+      </div><!-- /continent-body -->
     </section>
 
     <!-- TILING SYSTEM -->
@@ -154,6 +163,6 @@
   <script src="https://cdn.jsdelivr.net/npm/maplibre-gl@4.7.1/dist/maplibre-gl.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/@turf/turf@6.5.0/turf.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/shpjs@4.0.4/dist/shp.min.js"></script>
-  <script src="js/app.js?v=3"></script>
+  <script src="js/app.js?v=4"></script>
 </body>
 </html>

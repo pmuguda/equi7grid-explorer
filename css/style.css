@@ -107,6 +107,38 @@ body { display: flex; background: var(--bg); color: var(--text); font-size: 14px
   margin-bottom: 10px;
 }
 
+/* ── Section title row (title + toggle) ── */
+.section-title-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 10px;
+}
+
+.section-title-row .section-title {
+  margin-bottom: 0;
+}
+
+.toggle-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  border-radius: 5px;
+  border: 1px solid var(--border);
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+  transition: color 0.15s, background 0.15s;
+  flex-shrink: 0;
+  padding: 0;
+}
+
+.toggle-btn svg { width: 14px; height: 14px; transition: transform 0.22s ease; }
+.toggle-btn:hover { color: var(--text); background: rgba(255,255,255,0.06); }
+.toggle-btn.collapsed svg { transform: rotate(-90deg); }
+
 /* ── Continent buttons ── */
 .continent-grid {
   display: grid;

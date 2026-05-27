@@ -437,3 +437,68 @@ body { display: flex; background: var(--bg); color: var(--text); font-size: 14px
 #sidebar::-webkit-scrollbar { width: 4px; }
 #sidebar::-webkit-scrollbar-track { background: transparent; }
 #sidebar::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
+
+/* ── Sidebar collapse ── */
+#sidebar {
+  transition: width 0.28s ease, min-width 0.28s ease;
+}
+
+body.sidebar-collapsed #sidebar {
+  width: 0;
+  min-width: 0;
+  overflow: hidden;
+  border-right: none;
+}
+
+/* ── Sidebar toggle tab ── */
+#sidebar-toggle {
+  position: fixed;
+  left: var(--sidebar-w);
+  top: 50%;
+  transform: translateY(-50%);
+  z-index: 30;
+  width: 18px;
+  height: 52px;
+  padding: 0;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-left: none;
+  border-radius: 0 8px 8px 0;
+  color: var(--muted);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: left 0.28s ease, color 0.15s, background 0.15s;
+}
+
+#sidebar-toggle:hover {
+  color: var(--text);
+  background: rgba(255,255,255,0.06);
+}
+
+#sidebar-toggle svg {
+  width: 12px;
+  height: 12px;
+  flex-shrink: 0;
+  transition: transform 0.28s ease;
+}
+
+/* When collapsed: tab moves to left edge; chevron flips to point right */
+body.sidebar-collapsed #sidebar-toggle {
+  left: 0;
+  border-radius: 0 8px 8px 0;
+}
+
+body.sidebar-collapsed #sidebar-toggle svg {
+  transform: rotate(180deg);
+}
+
+/* Reposition floating UI elements when sidebar is hidden */
+body.sidebar-collapsed #hint-banner {
+  left: 50%;
+}
+
+body.sidebar-collapsed #loader {
+  left: 24px;
+}

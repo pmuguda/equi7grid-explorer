@@ -690,6 +690,13 @@ document.querySelectorAll('.cont-btn').forEach(btn => {
   btn.addEventListener('click', () => selectContinent(btn.dataset.id));
 });
 
+/* ─────────── Sidebar collapse / expand ─────────── */
+$('sidebar-toggle').addEventListener('click', () => {
+  document.body.classList.toggle('sidebar-collapsed');
+  // Trigger MapLibre resize so it fills the new canvas dimensions
+  setTimeout(() => map.resize(), 30);
+});
+
 /* ─────────── Toggle continent buttons panel ─────────── */
 $('btn-toggle-continents').addEventListener('click', () => {
   const body    = $('continent-body');

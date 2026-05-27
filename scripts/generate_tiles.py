@@ -169,14 +169,37 @@ def generate_tiles(e7):
             print(f"  Wrote {out} ({len(features)} tiles)")
 
 
+def generate_overview():
+    """Merge all T6 tiles into a single overview GeoJSON for the world map.
+
+    This avoids using the raw Equi7Grid zone polygons, which encircle the
+    geographic poles in WGS84 and cause MapLibre to flood-fill the top/bottom
+    of the map with the wrong colour.
+    """
+    features = []
+    for continent in CONTINENTS:
+        path = TILES_OUT / f"{continent.lower()}_t6.geojson"
+        if not path.exists():
+            continue
+        with open(path) as fh:
+            fc = json.load(fh)
+        features.extend(fc["features"])
+    out = OUT_DIR / "overview_t6.geojson"
+    out.write_text(json.dumps({"type": "FeatureCollection", "features": features}))
+    print(f"  Wrote {out} ({len(features)} tiles across all continents)")
+
+
 if __name__ == "__main__":
     print("Loading Equi7Grid (1000m sampling)...")
     e7 = get_standard_equi7grid(SAMPLING)
 
-    print("Generating zone boundaries...")
+    print("Generating zone boundaries (kept for reference)...")
     generate_zones(e7)
 
     print("Generating tile boundaries...")
     generate_tiles(e7)
+
+    print("Generating world overview (merged T6)...")
+    generate_overview()
 
     print("Done.")

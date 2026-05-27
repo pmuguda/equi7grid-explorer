@@ -67,10 +67,17 @@ function initMap() {
 
 function onMapLoad() {
   /* ── GeoJSON sources ── */
-  map.addSource('zones', {
+  // Fixed label points for each continent (shown on the world overview)
+  map.addSource('continent-labels', {
     type: 'geojson',
-    data: emptyFC(),
-    promoteId: 'id',
+    data: {
+      type: 'FeatureCollection',
+      features: Object.entries(CONTINENT_NAMES).map(([id, name]) => ({
+        type: 'Feature',
+        properties: { id, name, color: CONTINENT_COLORS[id] },
+        geometry: { type: 'Point', coordinates: CONTINENT_VIEWS[id].center },
+      })),
+    },
   });
   map.addSource('tiles', {
     type: 'geojson',
@@ -85,49 +92,22 @@ function onMapLoad() {
     data: emptyFC(),
   });
 
-  /* ── Zone layers ── */
+  /* ── Continent label layer (world overview only) ── */
   map.addLayer({
-    id: 'zones-fill',
-    type: 'fill',
-    source: 'zones',
-    paint: {
-      'fill-color': ['get', 'color'],
-      'fill-opacity': [
-        'case',
-        ['boolean', ['feature-state', 'hover'], false], 0.45,
-        ['boolean', ['feature-state', 'selected'], false], 0.5,
-        0.22,
-      ],
-    },
-  });
-  map.addLayer({
-    id: 'zones-line',
-    type: 'line',
-    source: 'zones',
-    paint: {
-      'line-color': ['get', 'color'],
-      'line-width': [
-        'case',
-        ['boolean', ['feature-state', 'selected'], false], 2.5,
-        1.2,
-      ],
-      'line-opacity': 0.9,
-    },
-  });
-  map.addLayer({
-    id: 'zones-label',
+    id: 'continent-labels',
     type: 'symbol',
-    source: 'zones',
+    source: 'continent-labels',
     layout: {
       'text-field': ['get', 'name'],
-      'text-size': 12,
+      'text-size': 14,
       'text-font': ['Open Sans Semibold', 'Arial Unicode MS Bold'],
       'text-anchor': 'center',
+      'text-allow-overlap': false,
     },
     paint: {
       'text-color': ['get', 'color'],
-      'text-halo-color': 'rgba(0,0,0,0.7)',
-      'text-halo-width': 1.5,
+      'text-halo-color': 'rgba(0,0,0,0.85)',
+      'text-halo-width': 2,
     },
   });
 
@@ -266,30 +246,23 @@ function onMapLoad() {
   });
 
   /* ── Map interactions ── */
-  let hoveredId = null;
 
-  map.on('mousemove', 'zones-fill', e => {
-    if (state.drawMode) return;
+  // In world overview (no continent selected), hovering a tile shows a pointer.
+  map.on('mousemove', 'tiles-fill', () => {
+    if (state.drawMode || state.continent) return;
     map.getCanvas().style.cursor = 'pointer';
-    if (e.features.length > 0) {
-      if (hoveredId !== null)
-        map.setFeatureState({ source: 'zones', id: hoveredId }, { hover: false });
-      hoveredId = e.features[0].id;
-      map.setFeatureState({ source: 'zones', id: hoveredId }, { hover: true });
-    }
   });
 
-  map.on('mouseleave', 'zones-fill', () => {
-    if (state.drawMode) return;
-    map.getCanvas().style.cursor = '';
-    if (hoveredId !== null)
-      map.setFeatureState({ source: 'zones', id: hoveredId }, { hover: false });
-    hoveredId = null;
+  map.on('mouseleave', 'tiles-fill', () => {
+    if (!state.drawMode && !state.continent)
+      map.getCanvas().style.cursor = '';
   });
 
-  map.on('click', 'zones-fill', e => {
-    if (state.drawMode) return;
-    selectContinent(e.features[0].properties.id);
+  // Clicking a tile in world overview selects its continent.
+  map.on('click', 'tiles-fill', e => {
+    if (state.drawMode || state.continent) return;
+    const cont = e.features[0].properties.continent;
+    if (cont) selectContinent(cont);
   });
 
   /* drawing clicks */
@@ -302,28 +275,31 @@ function onMapLoad() {
     if (e.key === 'Escape') disableDrawMode();
   });
 
-  /* ── Load zone boundaries ── */
-  fetch('data/zones/e7_zones.geojson')
+  /* ── Load world overview (all T6 tiles, avoids zone-polygon flood-fill) ── */
+  showLoader('Loading world overview…');
+  fetch('data/overview_t6.geojson')
     .then(r => r.json())
-    .then(data => map.getSource('zones').setData(data))
-    .catch(err => console.error('Failed to load zones:', err));
+    .then(data => {
+      map.getSource('tiles').setData(data);
+      hideLoader();
+    })
+    .catch(err => {
+      console.error('Failed to load overview:', err);
+      hideLoader();
+    });
 }
 
 /* ─────────── Continent selection ─────────── */
 function selectContinent(id) {
   if (state.continent === id) return;
 
-  // Deselect previous
-  if (state.continent)
-    map.setFeatureState({ source: 'zones', id: state.continent }, { selected: false });
-
   state.continent = id;
   state.tiling = currentTiling();
   state.aoi = null;
   state.intersecting = new Set();
 
-  // Update map feature state
-  map.setFeatureState({ source: 'zones', id }, { selected: true });
+  // Hide continent labels; only visible on the world overview
+  map.setLayoutProperty('continent-labels', 'visibility', 'none');
 
   // Update sidebar buttons
   document.querySelectorAll('.cont-btn').forEach(btn => {

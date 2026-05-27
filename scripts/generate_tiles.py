@@ -136,10 +136,16 @@ def generate_tiles(e7):
                 )
                 ring = normalize_ring([[lon, lat] for lon, lat in zip(lons, lats)])
 
-                # Skip polar tiles that wrap around a geographic pole (360° span).
-                # These cannot be represented as a valid flat-map polygon.
+                # Skip tiles that are too close to a geographic pole.
+                # Near-polar tiles appear extremely distorted in WGS84 because
+                # the AEQD projection collapses east-west extents near the poles.
+                # A longitude span > 50° indicates this distortion; likewise we
+                # drop anything that touches beyond ±84° latitude.
                 ring_lons = [c[0] for c in ring]
-                if max(ring_lons) - min(ring_lons) > 180:
+                ring_lats = [c[1] for c in ring]
+                if (max(ring_lons) - min(ring_lons) > 50
+                        or max(ring_lats) > 84
+                        or min(ring_lats) < -84):
                     continue
 
                 features.append({

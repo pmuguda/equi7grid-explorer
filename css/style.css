@@ -502,3 +502,49 @@ body.sidebar-collapsed #hint-banner {
 body.sidebar-collapsed #loader {
   left: 24px;
 }
+
+/* ── 2D / 3D view toggle ── */
+#view-toggle-wrap {
+  position: fixed;
+  top: 16px;
+  left: calc(var(--sidebar-w) + 16px);
+  display: flex;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  overflow: hidden;
+  z-index: 20;
+  background: var(--surface);
+  box-shadow: 0 2px 10px rgba(0,0,0,0.45);
+  transition: left 0.28s ease;
+}
+
+.view-toggle-pill {
+  padding: 6px 14px;
+  font-size: 12px;
+  font-weight: 700;
+  border: none;
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+  transition: background 0.18s, color 0.18s;
+  letter-spacing: 0.06em;
+  line-height: 1;
+}
+
+.view-toggle-pill + .view-toggle-pill {
+  border-left: 1px solid var(--border);
+}
+
+.view-toggle-pill.active {
+  background: var(--accent);
+  color: #fff;
+}
+
+.view-toggle-pill:not(.active):hover {
+  color: var(--text);
+  background: rgba(255, 255, 255, 0.07);
+}
+
+body.sidebar-collapsed #view-toggle-wrap {
+  left: 34px;  /* sidebar-toggle tab (18px) + 16px gap */
+}

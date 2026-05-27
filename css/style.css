@@ -401,7 +401,7 @@ body { display: flex; background: var(--bg); color: var(--text); font-size: 14px
 /* ── Loader ── */
 #loader {
   position: fixed;
-  top: 16px;
+  top: 56px;
   left: calc(var(--sidebar-w) + 16px);
   background: rgba(13,17,23,0.9);
   border: 1px solid var(--border);

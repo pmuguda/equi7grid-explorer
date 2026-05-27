@@ -696,7 +696,6 @@ $('btn-2d').addEventListener('click', () => {
   viewIs3D = false;
   $('btn-2d').classList.add('active');
   $('btn-3d').classList.remove('active');
-  map.setProjection('mercator');
   map.easeTo({ pitch: 0, bearing: 0, duration: 700 });
 });
 
@@ -705,7 +704,7 @@ $('btn-3d').addEventListener('click', () => {
   viewIs3D = true;
   $('btn-3d').classList.add('active');
   $('btn-2d').classList.remove('active');
-  map.setProjection('globe');
+  map.easeTo({ pitch: 60, bearing: -20, duration: 800 });
 });
 
 /* ─────────── Toggle continent buttons panel ─────────── */

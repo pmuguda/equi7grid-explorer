@@ -169,6 +169,126 @@ def generate_tiles(e7):
             print(f"  Wrote {out} ({len(features)} tiles)")
 
 
+def generate_zone_hulls(e7):
+    """Generate zone hull polygons from the union of filtered T6 tile extents.
+
+    Computes the union of each continent's T6 tile footprints in its native
+    projected (AEQD) space, then reprojects to WGS84.  Unlike the raw
+    proj_zone_geog polygons these hulls cannot encircle the poles because
+    only tiles that passed the WGS84 lat/lon-span filter are included.
+
+    Antarctica is a special case: its tiles form a full 360° annulus around
+    the South Pole.  We represent it with a simple bounding rectangle.
+    """
+    TILES_OUT.mkdir(parents=True, exist_ok=True)
+    features = []
+
+    for continent in CONTINENTS:
+        ts = e7[continent]
+        crs = ts.pyproj_crs
+        transformer = pyproj.Transformer.from_crs(crs, "EPSG:4326", always_xy=True)
+
+        # Get the names of tiles that survived the WGS84 filter
+        path = TILES_OUT / f"{continent.lower()}_t6.geojson"
+        if not path.exists():
+            print(f"  SKIP hull {continent}: tile file missing")
+            continue
+        with open(path) as fh:
+            fc = json.load(fh)
+        valid_names = {f["properties"]["name"] for f in fc["features"]}
+
+        try:
+            all_tiles = list(ts.get_tiles_in_geog_bbox(
+                (-180, -90, 180, 90), tiling_id="T6", cover_land=False,
+            ))
+        except Exception as exc:
+            print(f"  SKIP hull {continent}: {exc}")
+            continue
+
+        valid_tiles = [t for t in all_tiles if t.name in valid_names]
+        if not valid_tiles:
+            continue
+
+        # ── Antarctica: 360° annulus → use a simple lat-band rectangle ──────
+        if continent == "AN":
+            # Determine the northern boundary from actual tile data
+            north_lats = []
+            for tile in valid_tiles:
+                xmin, ymin, xmax, ymax = tile.outer_boundary_extent
+                lons_t, lats_t = transformer.transform(
+                    [xmin, xmin, xmax, xmax],
+                    [ymin, ymax, ymin, ymax],
+                )
+                north_lats.extend(lats_t)
+            north = round(max(north_lats), 2)
+            # Emit raw coordinates — do NOT pass through normalize_ring because
+            # that function collapses a full-width [-180, 180] rectangle.
+            geom_json = {
+                "type": "Polygon",
+                "coordinates": [[
+                    [-180.0, -84.0],
+                    [-180.0, north],
+                    [ 180.0, north],
+                    [ 180.0, -84.0],
+                    [-180.0, -84.0],
+                ]],
+            }
+
+        # ── All other continents: union projected boxes → reproject ──────────
+        else:
+            proj_boxes = [box(*t.outer_boundary_extent) for t in valid_tiles]
+            proj_hull = shapely.unary_union(proj_boxes)
+            # Smooth the tile-edge staircase (600 km steps) before reprojecting
+            proj_hull = proj_hull.simplify(300_000, preserve_topology=True)
+            densified = shapely.segmentize(proj_hull, max_segment_length=100_000)
+
+            def reproject_ring(coords):
+                lons, lats = transformer.transform(
+                    [c[0] for c in coords], [c[1] for c in coords]
+                )
+                ring = normalize_ring([[lo, la] for lo, la in zip(lons, lats)])
+                rl = [c[0] for c in ring]
+                rb = [c[1] for c in ring]
+                if max(rl) - min(rl) > 300 or max(rb) > 85 or min(rb) < -85:
+                    return None
+                return ring
+
+            gtype = densified.geom_type
+            if gtype == "Polygon":
+                ring = reproject_ring(list(densified.exterior.coords))
+                if ring is None:
+                    print(f"  SKIP hull {continent}: distorted")
+                    continue
+                geom_json = {"type": "Polygon", "coordinates": [ring]}
+            elif gtype == "MultiPolygon":
+                polys = []
+                for p in densified.geoms:
+                    ring = reproject_ring(list(p.exterior.coords))
+                    if ring:
+                        polys.append([ring])
+                if not polys:
+                    continue
+                geom_json = {"type": "MultiPolygon", "coordinates": polys}
+            else:
+                print(f"  SKIP hull {continent}: unexpected geom type {gtype}")
+                continue
+
+        features.append({
+            "type": "Feature",
+            "properties": {
+                "id": continent,
+                "name": NAMES[continent],
+                "color": COLORS[continent],
+            },
+            "geometry": geom_json,
+        })
+
+    out = OUT_DIR / "zones" / "e7_zone_hulls.geojson"
+    out.parent.mkdir(parents=True, exist_ok=True)
+    out.write_text(json.dumps({"type": "FeatureCollection", "features": features}))
+    print(f"  Wrote {out} ({len(features)} zones)")
+
+
 def generate_overview():
     """Merge all T6 tiles into a single overview GeoJSON for the world map.
 
@@ -198,6 +318,9 @@ if __name__ == "__main__":
 
     print("Generating tile boundaries...")
     generate_tiles(e7)
+
+    print("Generating zone hulls (from filtered tile unions)...")
+    generate_zone_hulls(e7)
 
     print("Generating world overview (merged T6)...")
     generate_overview()

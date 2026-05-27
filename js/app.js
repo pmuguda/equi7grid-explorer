@@ -67,7 +67,13 @@ function initMap() {
 
 function onMapLoad() {
   /* ── GeoJSON sources ── */
-  // Fixed label points for each continent (shown on the world overview)
+  // Zone hull polygons (one per continent; used for world-overview fill/click)
+  map.addSource('zones', {
+    type: 'geojson',
+    data: emptyFC(),
+    promoteId: 'id',
+  });
+  // Fixed label points so continent names stay well-placed
   map.addSource('continent-labels', {
     type: 'geojson',
     data: {
@@ -92,21 +98,50 @@ function onMapLoad() {
     data: emptyFC(),
   });
 
-  /* ── Continent label layer (world overview only) ── */
+  /* ── Zone hull layers (world overview) ── */
+  map.addLayer({
+    id: 'zones-fill',
+    type: 'fill',
+    source: 'zones',
+    paint: {
+      'fill-color': ['get', 'color'],
+      'fill-opacity': [
+        'case',
+        ['boolean', ['feature-state', 'hover'],    false], 0.45,
+        ['boolean', ['feature-state', 'selected'], false], 0.50,
+        0.22,
+      ],
+    },
+  });
+  map.addLayer({
+    id: 'zones-line',
+    type: 'line',
+    source: 'zones',
+    paint: {
+      'line-color': ['get', 'color'],
+      'line-width': [
+        'case',
+        ['boolean', ['feature-state', 'selected'], false], 2.5,
+        1.2,
+      ],
+      'line-opacity': 0.9,
+    },
+  });
+  /* Continent name labels (hardcoded points, better placement than polygon centroids) */
   map.addLayer({
     id: 'continent-labels',
     type: 'symbol',
     source: 'continent-labels',
     layout: {
       'text-field': ['get', 'name'],
-      'text-size': 14,
+      'text-size': 13,
       'text-font': ['Open Sans Semibold', 'Arial Unicode MS Bold'],
       'text-anchor': 'center',
       'text-allow-overlap': false,
     },
     paint: {
       'text-color': ['get', 'color'],
-      'text-halo-color': 'rgba(0,0,0,0.85)',
+      'text-halo-color': 'rgba(0,0,0,0.8)',
       'text-halo-width': 2,
     },
   });
@@ -246,23 +281,30 @@ function onMapLoad() {
   });
 
   /* ── Map interactions ── */
+  let hoveredZoneId = null;
 
-  // In world overview (no continent selected), hovering a tile shows a pointer.
-  map.on('mousemove', 'tiles-fill', () => {
-    if (state.drawMode || state.continent) return;
+  map.on('mousemove', 'zones-fill', e => {
+    if (state.drawMode) return;
     map.getCanvas().style.cursor = 'pointer';
+    if (e.features.length > 0) {
+      if (hoveredZoneId !== null)
+        map.setFeatureState({ source: 'zones', id: hoveredZoneId }, { hover: false });
+      hoveredZoneId = e.features[0].id;
+      map.setFeatureState({ source: 'zones', id: hoveredZoneId }, { hover: true });
+    }
   });
 
-  map.on('mouseleave', 'tiles-fill', () => {
-    if (!state.drawMode && !state.continent)
-      map.getCanvas().style.cursor = '';
+  map.on('mouseleave', 'zones-fill', () => {
+    if (state.drawMode) return;
+    map.getCanvas().style.cursor = '';
+    if (hoveredZoneId !== null)
+      map.setFeatureState({ source: 'zones', id: hoveredZoneId }, { hover: false });
+    hoveredZoneId = null;
   });
 
-  // Clicking a tile in world overview selects its continent.
-  map.on('click', 'tiles-fill', e => {
-    if (state.drawMode || state.continent) return;
-    const cont = e.features[0].properties.continent;
-    if (cont) selectContinent(cont);
+  map.on('click', 'zones-fill', e => {
+    if (state.drawMode) return;
+    selectContinent(e.features[0].properties.id);
   });
 
   /* drawing clicks */
@@ -275,30 +317,28 @@ function onMapLoad() {
     if (e.key === 'Escape') disableDrawMode();
   });
 
-  /* ── Load world overview (all T6 tiles, avoids zone-polygon flood-fill) ── */
-  showLoader('Loading world overview…');
-  fetch('data/overview_t6.geojson')
+  /* ── Load zone hull boundaries ── */
+  fetch('data/zones/e7_zone_hulls.geojson')
     .then(r => r.json())
-    .then(data => {
-      map.getSource('tiles').setData(data);
-      hideLoader();
-    })
-    .catch(err => {
-      console.error('Failed to load overview:', err);
-      hideLoader();
-    });
+    .then(data => map.getSource('zones').setData(data))
+    .catch(err => console.error('Failed to load zone hulls:', err));
 }
 
 /* ─────────── Continent selection ─────────── */
 function selectContinent(id) {
   if (state.continent === id) return;
 
+  // Deselect previous zone
+  if (state.continent)
+    map.setFeatureState({ source: 'zones', id: state.continent }, { selected: false });
+
   state.continent = id;
   state.tiling = currentTiling();
   state.aoi = null;
   state.intersecting = new Set();
 
-  // Hide continent labels; only visible on the world overview
+  // Highlight selected zone; hide labels (not needed when zoomed in)
+  map.setFeatureState({ source: 'zones', id }, { selected: true });
   map.setLayoutProperty('continent-labels', 'visibility', 'none');
 
   // Update sidebar buttons

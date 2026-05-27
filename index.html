@@ -1,0 +1,159 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Equi7Grid Explorer</title>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/maplibre-gl@4.7.1/dist/maplibre-gl.css">
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+
+  <!-- ─────────────── SIDEBAR ─────────────── -->
+  <aside id="sidebar">
+
+    <header class="sidebar-header">
+      <div class="logo-mark">E7</div>
+      <div>
+        <h1>Equi7Grid Explorer</h1>
+        <p>Discrete global grid system by TU Wien</p>
+      </div>
+    </header>
+
+    <!-- CONTINENT SELECTOR -->
+    <section class="panel-section">
+      <h2 class="section-title">1 · Select Continent</h2>
+      <p class="section-hint">Click a colored zone on the map or a button below.</p>
+      <div class="continent-grid" id="continent-grid">
+        <button class="cont-btn" data-id="AF">Africa</button>
+        <button class="cont-btn" data-id="AN">Antarctica</button>
+        <button class="cont-btn" data-id="AS">Asia</button>
+        <button class="cont-btn" data-id="EU">Europe</button>
+        <button class="cont-btn" data-id="NA">N. America</button>
+        <button class="cont-btn" data-id="OC">Oceania</button>
+        <button class="cont-btn" data-id="SA">S. America</button>
+      </div>
+    </section>
+
+    <!-- TILING SYSTEM -->
+    <section class="panel-section" id="tiling-section" hidden>
+      <h2 class="section-title">2 · Tiling System</h2>
+      <div class="tiling-group">
+        <label class="tiling-opt">
+          <input type="radio" name="tiling" value="T6" checked>
+          <span class="tiling-label">
+            <strong>T6</strong>
+            <em>600 km × 600 km</em>
+          </span>
+        </label>
+        <label class="tiling-opt">
+          <input type="radio" name="tiling" value="T3">
+          <span class="tiling-label">
+            <strong>T3</strong>
+            <em>300 km × 300 km</em>
+          </span>
+        </label>
+        <label class="tiling-opt">
+          <input type="radio" name="tiling" value="T1">
+          <span class="tiling-label">
+            <strong>T1</strong>
+            <em>100 km × 100 km</em>
+          </span>
+        </label>
+      </div>
+    </section>
+
+    <!-- AOI TOOLS -->
+    <section class="panel-section" id="aoi-section" hidden>
+      <h2 class="section-title">3 · Area of Interest</h2>
+      <p class="section-hint">Draw or upload a region to find intersecting tiles.</p>
+      <div class="tool-row">
+        <button class="tool-btn" id="btn-bbox" title="Click twice to define a bounding box">
+          <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.8">
+            <rect x="3" y="3" width="14" height="14" rx="1"/>
+            <circle cx="3" cy="3" r="1.5" fill="currentColor"/>
+            <circle cx="17" cy="3" r="1.5" fill="currentColor"/>
+            <circle cx="3" cy="17" r="1.5" fill="currentColor"/>
+            <circle cx="17" cy="17" r="1.5" fill="currentColor"/>
+          </svg>
+          Draw Rectangle
+        </button>
+        <button class="tool-btn" id="btn-poly" title="Click to add vertices, double-click to close">
+          <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.8">
+            <polygon points="10,2 18,8 15,17 5,17 2,8"/>
+          </svg>
+          Draw Polygon
+        </button>
+      </div>
+      <div class="tool-row">
+        <label class="upload-btn" id="lbl-geojson">
+          <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.8">
+            <path d="M10 3v10M6 9l4-6 4 6"/><path d="M4 15h12v2H4z"/>
+          </svg>
+          GeoJSON
+          <input type="file" id="upload-geojson" accept=".geojson,.json" hidden>
+        </label>
+        <label class="upload-btn" id="lbl-shp">
+          <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.8">
+            <path d="M10 3v10M6 9l4-6 4 6"/><path d="M4 15h12v2H4z"/>
+          </svg>
+          Shapefile (.zip)
+          <input type="file" id="upload-shp" accept=".zip" hidden>
+        </label>
+      </div>
+      <button class="clear-btn" id="btn-clear-aoi" hidden>✕ Clear AOI</button>
+    </section>
+
+    <!-- STATS -->
+    <section class="panel-section" id="stats-section" hidden>
+      <h2 class="section-title">4 · Tile Results</h2>
+      <div class="stats-grid">
+        <div class="stat-card inside">
+          <span class="stat-num" id="stat-inside">—</span>
+          <span class="stat-lbl">Inside AOI</span>
+        </div>
+        <div class="stat-card total">
+          <span class="stat-num" id="stat-total">—</span>
+          <span class="stat-lbl">Total tiles</span>
+        </div>
+      </div>
+      <div id="tile-list-wrap" hidden>
+        <p class="section-hint tile-list-header">Intersecting tiles:</p>
+        <ul id="tile-list"></ul>
+      </div>
+    </section>
+
+    <!-- EXPORT -->
+    <section class="panel-section" id="export-section" hidden>
+      <button class="export-btn" id="btn-export">
+        <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.8">
+          <path d="M10 13V3M6 9l4 4 4-4"/><path d="M3 15v1a1 1 0 001 1h12a1 1 0 001-1v-1"/>
+        </svg>
+        Export GeoJSON
+      </button>
+    </section>
+
+    <footer class="sidebar-footer">
+      Grid data: <a href="https://github.com/TUW-GEO/Equi7Grid" target="_blank">TUW-GEO/Equi7Grid</a>
+    </footer>
+  </aside>
+
+  <!-- ─────────────── MAP ─────────────── -->
+  <div id="map"></div>
+
+  <!-- hint banner shown while drawing -->
+  <div id="hint-banner" hidden></div>
+
+  <!-- loading spinner -->
+  <div id="loader" hidden>
+    <div class="spinner"></div>
+    <span id="loader-msg">Loading tiles…</span>
+  </div>
+
+  <!-- ─────────────── SCRIPTS ─────────────── -->
+  <script src="https://cdn.jsdelivr.net/npm/maplibre-gl@4.7.1/dist/maplibre-gl.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@turf/turf@6.5.0/turf.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/shpjs@4.0.4/dist/shp.min.js"></script>
+  <script src="js/app.js"></script>
+</body>
+</html>

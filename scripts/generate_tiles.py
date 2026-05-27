@@ -44,16 +44,40 @@ NAMES = {
 }
 
 
-def project_polygon_to_wgs84(polygon, src_crs):
-    """Project a shapely polygon from src_crs to WGS84."""
-    transformer = pyproj.Transformer.from_crs(src_crs, "EPSG:4326", always_xy=True)
-    # Densify the polygon edges for accurate reprojection
-    densified = shapely.segmentize(polygon, max_segment_length=50_000)
-    coords = list(densified.exterior.coords)
-    lons, lats = transformer.transform(
-        [c[0] for c in coords], [c[1] for c in coords]
-    )
-    return list(zip(lons, lats))
+def normalize_ring(pts):
+    """Adjust longitudes to avoid antimeridian jumps within a ring.
+
+    After reprojection, vertices near ±180° can jump from 179° to -179°
+    within the same polygon. This makes them coherent (even if > 180 or < -180)
+    so MapLibre renders the tile as a single shape rather than a map-wide band.
+    """
+    if not pts:
+        return pts
+    result = [[pts[0][0], pts[0][1]]]
+    for lon, lat in pts[1:]:
+        prev = result[-1][0]
+        while lon - prev > 180:
+            lon -= 360
+        while prev - lon > 180:
+            lon += 360
+        result.append([round(lon, 6), round(lat, 6)])
+    return result
+
+
+def normalize_geojson_geometry(geom_dict):
+    """Apply ring normalization to a GeoJSON geometry to fix antimeridian jumps."""
+    def fix_ring(ring):
+        return normalize_ring([[c[0], c[1]] for c in ring])
+
+    geo_type = geom_dict['type']
+    if geo_type == 'Polygon':
+        return {'type': 'Polygon',
+                'coordinates': [fix_ring(r) for r in geom_dict['coordinates']]}
+    elif geo_type == 'MultiPolygon':
+        return {'type': 'MultiPolygon',
+                'coordinates': [[fix_ring(r) for r in poly]
+                                for poly in geom_dict['coordinates']]}
+    return geom_dict
 
 
 def generate_zones(e7):
@@ -61,9 +85,8 @@ def generate_zones(e7):
     features = []
     for name in CONTINENTS:
         ts = e7[name]
-        # Get the geographic (WGS84) zone polygon
         zone_geog = ts.proj_zone_geog.geom
-        geom_json = mapping(zone_geog)
+        geom_json = normalize_geojson_geometry(mapping(zone_geog))
         features.append({
             "type": "Feature",
             "properties": {
@@ -111,7 +134,7 @@ def generate_tiles(e7):
                 lons, lats = transformer.transform(
                     [c[0] for c in coords], [c[1] for c in coords]
                 )
-                ring = [[round(lon, 6), round(lat, 6)] for lon, lat in zip(lons, lats)]
+                ring = normalize_ring([[lon, lat] for lon, lat in zip(lons, lats)])
 
                 features.append({
                     "type": "Feature",

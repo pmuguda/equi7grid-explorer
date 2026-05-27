@@ -6,6 +6,16 @@ const CONTINENT_NAMES = {
   EU: 'Europe', NA: 'North America', OC: 'Oceania', SA: 'South America',
 };
 
+const CONTINENT_VIEWS = {
+  AF: { center: [22,    5],  zoom: 3.0 },
+  AN: { center: [0,   -80],  zoom: 2.0 },
+  AS: { center: [100,  45],  zoom: 2.5 },
+  EU: { center: [24,   53],  zoom: 3.5 },
+  NA: { center: [-97,  52],  zoom: 2.5 },
+  OC: { center: [148, -25],  zoom: 3.0 },
+  SA: { center: [-60, -14],  zoom: 2.5 },
+};
+
 const CONTINENT_COLORS = {
   AF: '#e6a817', AN: '#74c476', AS: '#fd7f28',
   EU: '#4393c3', NA: '#d9534f', OC: '#20b2aa', SA: '#9b59b6',
@@ -165,6 +175,42 @@ function onMapLoad() {
     },
   });
 
+  /* ── Tile name labels ── */
+  map.addLayer({
+    id: 'tiles-label',
+    type: 'symbol',
+    source: 'tiles',
+    minzoom: 4,
+    layout: {
+      'text-field': ['get', 'name'],
+      'text-font': ['Open Sans Regular', 'Arial Unicode MS Regular'],
+      'text-size': [
+        'interpolate', ['linear'], ['zoom'],
+        4, 8,
+        7, 11,
+        10, 13,
+      ],
+      'text-anchor': 'center',
+      'text-max-width': 10,
+      'text-allow-overlap': false,
+      'text-ignore-placement': false,
+    },
+    paint: {
+      'text-color': [
+        'case',
+        ['==', ['get', 'status'], 'inside'], '#ffffff',
+        '#aaaaaa',
+      ],
+      'text-halo-color': 'rgba(0,0,0,0.75)',
+      'text-halo-width': 1.2,
+      'text-opacity': [
+        'interpolate', ['linear'], ['zoom'],
+        4, 0.5,
+        6, 1.0,
+      ],
+    },
+  });
+
   /* ── AOI layers ── */
   map.addLayer({
     id: 'aoi-fill',
@@ -302,17 +348,9 @@ function selectContinent(id) {
 }
 
 function zoomToContinent(id) {
-  fetch('data/zones/e7_zones.geojson')
-    .then(r => r.json())
-    .then(fc => {
-      const feat = fc.features.find(f => f.properties.id === id);
-      if (!feat) return;
-      const bbox = turf.bbox(feat);
-      map.fitBounds(
-        [[bbox[0], bbox[1]], [bbox[2], bbox[3]]],
-        { padding: 60, duration: 800 }
-      );
-    });
+  const v = CONTINENT_VIEWS[id];
+  if (!v) return;
+  map.flyTo({ center: v.center, zoom: v.zoom, duration: 800 });
 }
 
 /* ─────────── Tiling radio ─────────── */

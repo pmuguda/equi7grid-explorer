@@ -136,6 +136,12 @@ def generate_tiles(e7):
                 )
                 ring = normalize_ring([[lon, lat] for lon, lat in zip(lons, lats)])
 
+                # Skip polar tiles that wrap around a geographic pole (360° span).
+                # These cannot be represented as a valid flat-map polygon.
+                ring_lons = [c[0] for c in ring]
+                if max(ring_lons) - min(ring_lons) > 180:
+                    continue
+
                 features.append({
                     "type": "Feature",
                     "properties": {

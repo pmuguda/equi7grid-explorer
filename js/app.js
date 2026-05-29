@@ -718,46 +718,49 @@ function hexToRgba(hex, alpha) {
   return `rgba(${r},${g},${b},${alpha})`;
 }
 
-/* Convert zone GeoJSON polygons to globe.gl path format (exterior rings only) */
-function zoneFeaturesToPaths(features) {
+/* Build transparent polygon features — invisible fill, only for Three.js click raycasting */
+function prepareGlobeZones(features) {
+  return features.map(f => ({ ...f, properties: { ...f.properties, _type: 'zone' } }));
+}
+
+/* Convert GeoJSON polygons → globe.gl path objects (exterior ring only) */
+function featuresToPaths(features, extraProps) {
   const paths = [];
   features.forEach(feat => {
-    const { id, color } = feat.properties;
     const geom = feat.geometry;
     if (!geom) return;
     const polys = geom.type === 'Polygon'      ? [geom.coordinates]
                 : geom.type === 'MultiPolygon' ? geom.coordinates : [];
     polys.forEach(poly =>
-      // only exterior ring (index 0) — skip holes
-      paths.push({ id, color, coords: poly[0].map(([lng, lat]) => ({ lat, lng })) })
+      paths.push({ ...extraProps(feat), coords: poly[0].map(([lng, lat]) => ({ lat, lng })) })
     );
   });
   return paths;
 }
 
-/* Build transparent zone polygon features (for Three.js click-ray detection only) */
-function prepareGlobeZones(features) {
-  return features.map(f => ({
-    ...f,
-    properties: { ...f.properties, _type: 'zone' },
-  }));
-}
-
 /*
- * Rendering strategy:
- *  • pathsData  → visible colored zone borders, zero triangulation artifacts
- *  • polygonsData → completely transparent fills, exist ONLY so Three.js
- *    raycasting can detect clicks (opacity doesn't affect ray-intersection)
- *
- * AEQD tile polygons are never shown on the globe — they look like exploding
- * fins due to projection distortion. Tile stats/export still work in sidebar.
+ * Visual rendering:  pathsData (zone borders + tile grid) — zero z-fighting
+ * Click detection:   polygonsData with transparent fills (Three.js raycasting)
+ * Tiles are never filled polygons (AEQD distortion creates severe artifacts).
  */
 function refreshGlobeData() {
   if (!globeInstance || !zonesGeoJSON) return;
-  // Transparent polygon fills for click detection
+
+  // Transparent polygon fills for zone click detection
   globeInstance.polygonsData(prepareGlobeZones(zonesGeoJSON.features));
-  // Visible path borders (re-build to pick up any new zone data)
-  globeInstance.pathsData(zoneFeaturesToPaths(zonesGeoJSON.features));
+
+  // Visible paths: zone borders always + tile grid when a continent is selected
+  const zonePaths = featuresToPaths(zonesGeoJSON.features, f => ({
+    id: f.properties.id, color: f.properties.color, kind: 'zone',
+  }));
+  const tilePaths = (state.tilesData && state.continent)
+    ? featuresToPaths(state.tilesData.features, f => ({
+        color: f.properties.color,
+        status: f.properties.status,
+        kind: 'tile',
+      }))
+    : [];
+  globeInstance.pathsData([...zonePaths, ...tilePaths]);
 }
 
 /* Inactivity-based auto-rotation */
@@ -780,20 +783,21 @@ function initGlobe() {
   globeInstance = Globe({ animateIn: true })(container)
     .width(container.offsetWidth)
     .height(container.offsetHeight)
-    .backgroundColor('#080c14')
+    .backgroundColor('#0d1117')
     .showAtmosphere(true)
     .atmosphereColor('#2255cc')
-    .atmosphereAltitude(0.20)
+    .atmosphereAltitude(0.15)
     .globeImageUrl('https://cdn.jsdelivr.net/npm/three-globe/example/img/earth-dark.jpg')
 
-    /* ── Transparent polygon fills: invisible but clickable via ray-casting ── */
+    /* ── Transparent polygon fills — only for Three.js click raycasting ── */
     .polygonCapColor(() => 'rgba(0,0,0,0)')
     .polygonSideColor(() => 'rgba(0,0,0,0)')
     .polygonStrokeColor(() => 'rgba(0,0,0,0)')
-    .polygonAltitude(0.01)
+    .polygonAltitude(0.005)
     .polygonLabel(f => {
       const name = CONTINENT_NAMES[f.properties.id] || f.properties.id;
-      return `<div style="font:600 13px system-ui;color:${f.properties.color};`
+      const color = f.properties.color || '#fff';
+      return `<div style="font:600 13px system-ui;color:${color};`
            + `background:rgba(0,0,0,.82);padding:4px 10px;border-radius:6px;">`
            + `${name}</div>`;
     })
@@ -802,17 +806,24 @@ function initGlobe() {
       if (id) selectContinent(id);
     })
 
-    /* ── Colored paths: visible zone borders, zero triangulation artifacts ── */
+    /* ── Path layer — zone borders + tile grid, same colors as 2D ── */
     .pathsData([])
     .pathPoints(d => d.coords)
     .pathPointLat(d => d.lat)
     .pathPointLng(d => d.lng)
     .pathColor(d => {
-      // Highlight selected zone; dim others when a selection exists
+      if (d.kind === 'tile') {
+        // Full color for inside tiles, brighter than before for outside
+        return d.status === 'inside' ? d.color : hexToRgba(d.color, 0.65);
+      }
+      // Zone borders: selected = full color + bright, others dimmed when selection active
       if (d.id === state.continent) return d.color;
-      return hexToRgba(d.color, state.continent ? 0.35 : 0.75);
+      return hexToRgba(d.color, state.continent ? 0.50 : 0.85);
     })
-    .pathStroke(d => d.id === state.continent ? 0.7 : 0.4)
+    .pathStroke(d => {
+      if (d.kind === 'tile') return d.status === 'inside' ? 0.6 : 0.4;
+      return d.id === state.continent ? 1.4 : 0.8;
+    })
     .pathDashLength(1)
     .pathDashGap(0)
     .pathTransitionDuration(0);

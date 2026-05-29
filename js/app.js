@@ -363,8 +363,14 @@ function selectContinent(id) {
   // Reset AOI source
   map.getSource('aoi').setData(emptyFC());
 
-  // Zoom to continent
-  zoomToContinent(id);
+  // Zoom to continent (map or globe)
+  if (viewIs3D && globeInstance) {
+    const v = CONTINENT_VIEWS[id];
+    if (v) globeInstance.pointOfView({ lat: v.center[1], lng: v.center[0], altitude: 1.6 }, 900);
+    onGlobeInteraction(); // stop rotation, restart inactivity timer
+  } else {
+    zoomToContinent(id);
+  }
 
   // Load tiles
   loadTiles(id, state.tiling);
@@ -406,6 +412,8 @@ async function loadTiles(continent, tiling) {
 
     // Re-apply AOI if exists
     if (state.aoi) applyAOI(state.aoi, false);
+    // Sync tile data to globe if in 3D mode
+    refreshGlobeData();
   } catch (err) {
     console.error('Tile load error:', err);
   } finally {
@@ -460,11 +468,12 @@ function computeIntersections() {
     });
 
     state.intersecting = insideSet;
-    map.getSource('tiles').setData({
-      type: 'FeatureCollection',
-      features: updated,
-    });
+    const updatedFC = { type: 'FeatureCollection', features: updated };
+    map.getSource('tiles').setData(updatedFC);
+    // Keep tilesData in sync so globe refresh picks up statuses
+    state.tilesData = updatedFC;
 
+    refreshGlobeData();
     updateStats(insideSet);
     hideLoader();
   }, 0);
@@ -629,7 +638,9 @@ clearAoiBtn.addEventListener('click', () => {
         properties: { ...f.properties, status: undefined },
       })),
     };
+    state.tilesData = reset;
     map.getSource('tiles').setData(reset);
+    refreshGlobeData();
   }
 });
 
@@ -692,16 +703,62 @@ $('sidebar-toggle').addEventListener('click', () => {
 });
 
 /* ─────────── 2D / 3D view toggle ─────────── */
-let viewIs3D   = false;
+let viewIs3D    = false;
 let savedCamera = null;
 let globeInstance = null;
 let zonesGeoJSON  = null;   // set when zones GeoJSON is fetched
+let inactivityTimer = null;
+const INACTIVITY_MS = 30000;
 
+/* -- helpers -- */
 function hexToRgba(hex, alpha) {
   const r = parseInt(hex.slice(1, 3), 16);
   const g = parseInt(hex.slice(3, 5), 16);
   const b = parseInt(hex.slice(5, 7), 16);
   return `rgba(${r},${g},${b},${alpha})`;
+}
+
+/* Build zone features for globe, adding _type tag and NA polar-cap fix */
+function prepareGlobeZones(features) {
+  const result = features.map(f => ({
+    ...f, properties: { ...f.properties, _type: 'zone' },
+  }));
+
+  // NA is clipped at lat=85 for Mercator; add a polar cap to fill the gap to the pole
+  const na = result.find(f => f.properties.id === 'NA');
+  if (na) {
+    const capRing = [];
+    for (let lon = -180; lon <= 180; lon += 3) capRing.push([lon, 85.0]);
+    for (let lon = 180; lon >= -180; lon -= 3) capRing.push([lon, 89.9]);
+    capRing.push([-180, 85.0]);
+    result.push({
+      type: 'Feature',
+      properties: { ...na.properties },
+      geometry: { type: 'Polygon', coordinates: [capRing] },
+    });
+  }
+  return result;
+}
+
+/* Push current zones + tiles (with statuses) into the globe */
+function refreshGlobeData() {
+  if (!globeInstance) return;
+  const zoneFeats = zonesGeoJSON ? prepareGlobeZones(zonesGeoJSON.features) : [];
+  const tileFeats = state.tilesData
+    ? state.tilesData.features.map(f => ({ ...f, properties: { ...f.properties, _type: 'tile' } }))
+    : [];
+  globeInstance.polygonsData([...zoneFeats, ...tileFeats]);
+}
+
+/* Inactivity-based auto-rotation */
+function onGlobeInteraction() {
+  if (globeInstance) globeInstance.controls().autoRotate = false;
+  clearTimeout(inactivityTimer);
+  if (viewIs3D) {
+    inactivityTimer = setTimeout(() => {
+      if (globeInstance && viewIs3D) globeInstance.controls().autoRotate = true;
+    }, INACTIVITY_MS);
+  }
 }
 
 function initGlobe() {
@@ -714,28 +771,58 @@ function initGlobe() {
     .showAtmosphere(true)
     .atmosphereColor('#2a50d0')
     .atmosphereAltitude(0.22)
-    .globeImageUrl('https://unpkg.com/three-globe/example/img/earth-dark.jpg');
+    .globeImageUrl('https://unpkg.com/three-globe/example/img/earth-dark.jpg')
+    /* ── polygon styling (zones + tiles) ── */
+    .polygonCapColor(f => {
+      if (f.properties._type === 'tile') {
+        return f.properties.status === 'inside'
+          ? hexToRgba(f.properties.color, 0.75)
+          : hexToRgba(f.properties.color, 0.10);
+      }
+      return hexToRgba(f.properties.color, 0.38); // zones – see-through
+    })
+    .polygonSideColor(() => 'rgba(0,0,0,0)')
+    .polygonStrokeColor(f => {
+      if (f.properties._type === 'tile') {
+        return f.properties.status === 'inside'
+          ? hexToRgba(f.properties.color, 0.9)
+          : 'rgba(85,85,102,0.25)';
+      }
+      return 'rgba(255,255,255,0.45)';
+    })
+    .polygonAltitude(f => f.properties._type === 'tile' ? 0.012 : 0.006)
+    .polygonLabel(f => {
+      if (f.properties._type === 'tile') return null;
+      const name = CONTINENT_NAMES[f.properties.id] || f.properties.id;
+      return `<div style="font:600 13px system-ui;color:${f.properties.color};`
+           + `background:rgba(0,0,0,.75);padding:4px 10px;border-radius:6px;">`
+           + `${name}</div>`;
+    })
+    /* ── click zone to select continent ── */
+    .onPolygonClick(f => {
+      if (f.properties._type === 'tile') return;
+      const id = f.properties.id;
+      if (id) selectContinent(id);
+    });
 
-  // Slow auto-spin
-  globeInstance.controls().autoRotate      = true;
+  /* auto-rotate off by default; starts after inactivity */
+  globeInstance.controls().autoRotate      = false;
   globeInstance.controls().autoRotateSpeed = 0.4;
 
-  if (zonesGeoJSON) applyZonesToGlobe();
+  /* stop rotation on any user touch/drag */
+  const wrap = $('globe-wrap');
+  wrap.addEventListener('pointerdown', onGlobeInteraction);
+  wrap.addEventListener('wheel',       onGlobeInteraction, { passive: true });
+
+  refreshGlobeData();
+  startInactivityCountdown();
 }
 
-function applyZonesToGlobe() {
-  if (!globeInstance || !zonesGeoJSON) return;
-  globeInstance
-    .polygonsData(zonesGeoJSON.features)
-    .polygonCapColor(f => hexToRgba(f.properties.color, 0.65))
-    .polygonSideColor(() => 'rgba(0,0,0,0)')
-    .polygonStrokeColor(() => 'rgba(255,255,255,0.45)')
-    .polygonAltitude(0.008)
-    .polygonLabel(f =>
-      `<div style="font:600 13px system-ui;color:${f.properties.color};
-       background:rgba(0,0,0,.7);padding:4px 8px;border-radius:6px;">
-       ${CONTINENT_NAMES[f.properties.id] || f.properties.id}</div>`
-    );
+function startInactivityCountdown() {
+  clearTimeout(inactivityTimer);
+  inactivityTimer = setTimeout(() => {
+    if (globeInstance && viewIs3D) globeInstance.controls().autoRotate = true;
+  }, INACTIVITY_MS);
 }
 
 $('btn-2d').addEventListener('click', () => {
@@ -744,11 +831,12 @@ $('btn-2d').addEventListener('click', () => {
   $('btn-2d').classList.add('active');
   $('btn-3d').classList.remove('active');
 
-  // Hide globe, show map
+  clearTimeout(inactivityTimer);
+  if (globeInstance) globeInstance.controls().autoRotate = false;
+
   $('globe-wrap').hidden = true;
   $('map').style.visibility = '';
 
-  // Restore camera
   if (savedCamera) {
     map.flyTo({ ...savedCamera, pitch: 0, bearing: 0, duration: 700 });
     savedCamera = null;
@@ -761,22 +849,26 @@ $('btn-3d').addEventListener('click', () => {
   $('btn-3d').classList.add('active');
   $('btn-2d').classList.remove('active');
 
-  // Save current map camera
   savedCamera = { center: map.getCenter(), zoom: map.getZoom() };
 
-  // Show globe overlay, hide map canvas
   $('map').style.visibility = 'hidden';
   $('globe-wrap').hidden = false;
 
-  // Init globe on first use
   if (!globeInstance) {
     initGlobe();
-  } else if (zonesGeoJSON && !globeInstance.polygonsData().length) {
-    applyZonesToGlobe();
+  } else {
+    refreshGlobeData();
+    startInactivityCountdown();
+  }
+
+  // If a continent was already selected, fly globe to it
+  if (state.continent) {
+    const v = CONTINENT_VIEWS[state.continent];
+    if (v) globeInstance?.pointOfView({ lat: v.center[1], lng: v.center[0], altitude: 1.6 }, 900);
   }
 });
 
-// Keep globe sized to its container when window resizes
+/* resize globe on window resize or sidebar collapse */
 window.addEventListener('resize', () => {
   if (globeInstance && viewIs3D) {
     const c = $('globe-wrap');
@@ -784,7 +876,6 @@ window.addEventListener('resize', () => {
   }
 });
 
-// Resize globe when sidebar collapses (container width changes)
 $('sidebar-toggle').addEventListener('click', () => {
   if (globeInstance && viewIs3D) {
     setTimeout(() => {

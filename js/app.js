@@ -795,7 +795,7 @@ async function loadCountryBorders() {
     const fc = await fetchCountries();
     countryPaths = featuresToPaths(
       fc.features,
-      () => ({ kind: 'country', color: 'rgba(255,255,255,0.70)' }),
+      () => ({ kind: 'country', color: 'rgba(255,255,255,0.92)' }),
       0.005
     );
     refreshGlobeData();
@@ -885,12 +885,26 @@ function updateTileLabels() {
   globeInstance.labelsData(visible.slice(0, MAX_LABELS));
 }
 
-/* throttle label recompute to one per animation frame during zoom/pan */
-let labelUpdateQueued = false;
+/*
+ * Throttle label recompute to at most once per 200ms. onZoom fires every
+ * frame during drag/auto-rotate; recomputing the visible-label set (iterate
+ * all tile centroids + sort + rebuild label sprites) every frame tanks FPS.
+ */
+let lastLabelUpdate = 0;
+let labelTimer = null;
 function scheduleTileLabelUpdate() {
-  if (labelUpdateQueued) return;
-  labelUpdateQueued = true;
-  requestAnimationFrame(() => { labelUpdateQueued = false; updateTileLabels(); });
+  const now = performance.now();
+  const since = now - lastLabelUpdate;
+  clearTimeout(labelTimer);
+  if (since >= 200) {
+    lastLabelUpdate = now;
+    updateTileLabels();
+  } else {
+    labelTimer = setTimeout(() => {
+      lastLabelUpdate = performance.now();
+      updateTileLabels();
+    }, 200 - since);
+  }
 }
 
 /* Inactivity-based auto-rotation */
@@ -955,14 +969,20 @@ function initGlobe() {
     .pathColor(d => {
       if (d.kind === 'country') return d.color;
       if (d.kind === 'tile') {
-        return d.status === 'inside' ? d.color : hexToRgba(d.color, 0.70);
+        return d.status === 'inside' ? d.color : hexToRgba(d.color, 0.85);
       }
       if (d.id === state.continent) return d.color;
       return hexToRgba(d.color, state.continent ? 0.50 : 0.85);
     })
+    /*
+     * pathStroke: a numeric value renders a fat TUBE (expensive geometry);
+     * returning null renders a thin THREE.Line (far cheaper, crisp 1px).
+     * Countries + tiles → thin lines (huge perf win, esp. dense T1).
+     * Zone borders stay as tubes (only ~8-10 paths) so they read as bold.
+     */
     .pathStroke(d => {
-      if (d.kind === 'country') return 0.15;
-      if (d.kind === 'tile') return d.status === 'inside' ? 0.75 : 0.5;
+      if (d.kind === 'country') return null;   // thin line — performant
+      if (d.kind === 'tile')    return null;   // thin line — performant
       return d.id === state.continent ? 1.1 : 0.65;
     })
     .pathPointAlt(d => d.alt || 0)   // lift paths above globe texture
@@ -985,6 +1005,12 @@ function initGlobe() {
 
   globeInstance.controls().autoRotate      = false;
   globeInstance.controls().autoRotateSpeed = 0.35;
+
+  // Cap pixel ratio: retina screens render 4× the pixels, which tanks FPS for
+  // marginal sharpness. 1.5 keeps it crisp while greatly lightening the GPU.
+  try {
+    globeInstance.renderer().setPixelRatio(Math.min(window.devicePixelRatio || 1, 1.5));
+  } catch (_) {}
 
   const wrap = $('globe-wrap');
   wrap.addEventListener('pointerdown', onGlobeInteraction);

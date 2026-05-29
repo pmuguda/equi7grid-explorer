@@ -321,6 +321,80 @@ body { display: flex; background: var(--bg); color: var(--text); font-size: 14px
 
 .tile-list-header { margin-bottom: 6px; }
 
+/* ── On-land stat card ── */
+.stat-card.land { border-color: rgba(116,196,118,0.4); background: rgba(116,196,118,0.06); }
+.stat-card.land .stat-num { color: #74c476; }
+
+/* ── Tile list header row (title + long/short toggle) ── */
+.tile-list-header-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-top: 10px;
+  margin-bottom: 6px;
+}
+
+.name-toggle {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 11px;
+  color: var(--muted);
+  cursor: pointer;
+  user-select: none;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+.name-toggle input { accent-color: var(--accent); width: 12px; height: 12px; cursor: pointer; }
+
+/* ── Truncation ellipsis row ── */
+#tile-list li.tile-ellipsis {
+  color: var(--accent);
+  font-style: italic;
+  text-align: center;
+  background: none;
+}
+
+/* ── Sampling row (input + copy) ── */
+.sampling-row {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  margin-top: 8px;
+}
+.sampling-row label { font-size: 11px; color: var(--muted); white-space: nowrap; flex-shrink: 0; }
+.sampling-row input[type="number"] {
+  width: 68px;
+  padding: 4px 6px;
+  border-radius: 5px;
+  border: 1.5px solid var(--border);
+  background: var(--bg);
+  color: var(--text);
+  font-size: 12px;
+  font-family: inherit;
+}
+.sampling-row input[type="number"]:focus { outline: none; border-color: var(--accent); }
+.sampling-row .unit { font-size: 11px; color: var(--muted); }
+
+#btn-copy-tiles {
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  padding: 5px 9px;
+  border-radius: 6px;
+  border: 1.5px solid var(--border);
+  background: var(--bg);
+  color: var(--muted);
+  font-size: 11px;
+  cursor: pointer;
+  transition: all 0.15s;
+  white-space: nowrap;
+}
+#btn-copy-tiles svg { width: 12px; height: 12px; }
+#btn-copy-tiles:hover { border-color: var(--accent); color: var(--accent); background: rgba(88,166,255,0.06); }
+#btn-copy-tiles.copied { border-color: #74c476; color: #74c476; background: rgba(116,196,118,0.06); }
+
 #tile-list {
   list-style: none;
   max-height: 140px;

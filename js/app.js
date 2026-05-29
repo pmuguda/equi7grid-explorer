@@ -43,6 +43,8 @@ let state = {
 const $ = id => document.getElementById(id);
 const tilingSection  = $('tiling-section');
 const statsSection   = $('stats-section');
+const aoiResults     = $('aoi-results');
+const statLand       = $('stat-land');
 const exportSection  = $('export-section');
 const hintBanner     = $('hint-banner');
 const loader         = $('loader');
@@ -359,13 +361,15 @@ function selectContinent(id) {
   map.setFeatureState({ source: 'zones', id }, { selected: true });
   map.setLayoutProperty('continent-labels', 'visibility', 'none');
 
-  // Show tiling section, reset stats
+  // Show tiling section, reset stats display
   tilingSection.hidden  = false;
   $('no-selection-hint').hidden = true;
-  statsSection.hidden   = true;
+  statsSection.hidden   = true;   // shown again once tiles load
   exportSection.hidden  = true;
   clearAoiBtn.hidden    = true;
   $('aoi-clear-divider').hidden = true;
+  aoiResults.hidden     = true;
+  statLand.textContent  = '—';
 
   // Reset AOI source
   map.getSource('aoi').setData(emptyFC());
@@ -417,6 +421,8 @@ async function loadTiles(continent, tiling) {
     map.getSource('tiles').setData(state.tilesData);
 
     statTotal.textContent = state.tilesData.features.length.toLocaleString();
+    statsSection.hidden = false;
+    computeLandTiles();
 
     // Re-apply AOI if exists
     if (state.aoi) applyAOI(state.aoi, false);
@@ -494,25 +500,79 @@ function computeIntersections() {
   }, 0);
 }
 
+/* ─── Land-tile computation ─── */
+let landCountCache = {};   // key: 'CONTINENT_TILING' → count
+let countryBBoxCache = null;
+
+function computeLandTiles() {
+  if (!state.tilesData || !state.continent) return;
+  const key = `${state.continent}_${state.tiling}`;
+  if (landCountCache[key] !== undefined) {
+    statLand.textContent = landCountCache[key].toLocaleString();
+    return;
+  }
+  statLand.textContent = '…';
+  const tilesSnap = state.tilesData;
+
+  fetchCountries().then(fc => {
+    if (!countryBBoxCache) countryBBoxCache = fc.features.map(f => turf.bbox(f));
+    setTimeout(() => {
+      if (state.tilesData !== tilesSnap) return;  // continent changed
+      let count = 0;
+      for (const tile of tilesSnap.features) {
+        const tb = turf.bbox(tile);
+        const hits = fc.features.filter((_, i) => {
+          const cb = countryBBoxCache[i];
+          return !(tb[2] < cb[0] || tb[0] > cb[2] || tb[3] < cb[1] || tb[1] > cb[3]);
+        });
+        if (hits.some(c => { try { return turf.booleanIntersects(tile, c); } catch (_) { return false; } })) count++;
+      }
+      landCountCache[key] = count;
+      if (state.tilesData === tilesSnap) statLand.textContent = count.toLocaleString();
+    }, 0);
+  }).catch(() => { statLand.textContent = '?'; });
+}
+
+/* ─── Tile list renderer (truncated, formatted names) ─── */
+function renderTileList() {
+  const names = [...state.intersecting].sort();
+  if (names.length === 0) { tileListWrap.hidden = true; return; }
+  tileListWrap.hidden = false;
+
+  const longMode = !!$('chk-long-name')?.checked;
+  const sampling = Math.max(1, parseInt($('sampling-input')?.value) || 500);
+  const continent = state.continent || '';
+
+  const fmt = name => longMode ? `${continent}${sampling}M_${name}` : name;
+
+  const MAX_HEAD = 6, MAX_TAIL = 3, THRESHOLD = MAX_HEAD + MAX_TAIL + 1;
+  tileList.innerHTML = '';
+  const addLi = (text, cls) => {
+    const li = document.createElement('li');
+    li.textContent = text;
+    if (cls) li.className = cls;
+    tileList.appendChild(li);
+  };
+
+  if (names.length <= THRESHOLD) {
+    names.forEach(n => addLi(fmt(n)));
+  } else {
+    names.slice(0, MAX_HEAD).forEach(n => addLi(fmt(n)));
+    addLi(`··· ${names.length - MAX_HEAD - MAX_TAIL} more ···`, 'tile-ellipsis');
+    names.slice(-MAX_TAIL).forEach(n => addLi(fmt(n)));
+  }
+}
+
 function updateStats(insideSet) {
-  const total = state.tilesData ? state.tilesData.features.length : 0;
   statInside.textContent = insideSet.size.toLocaleString();
-  statTotal.textContent  = total.toLocaleString();
-  statsSection.hidden    = false;
   exportSection.hidden   = insideSet.size === 0;
 
-  // Show tile list only if manageable number
-  tileList.innerHTML = '';
-  if (insideSet.size > 0 && insideSet.size <= 200) {
-    tileListWrap.hidden = false;
-    insideSet.forEach(name => {
-      const li = document.createElement('li');
-      li.textContent = name;
-      tileList.appendChild(li);
-    });
-  } else {
-    tileListWrap.hidden = true;
+  if (insideSet.size === 0) {
+    aoiResults.hidden = true;
+    return;
   }
+  aoiResults.hidden = false;
+  renderTileList();
 }
 
 /* ─────────── Draw: Rectangle ─────────── */
@@ -642,8 +702,9 @@ clearAoiBtn.addEventListener('click', () => {
   state.intersecting = new Set();
   clearAoiBtn.hidden = true;
   $('aoi-clear-divider').hidden = true;
-  statsSection.hidden = true;
+  aoiResults.hidden = true;
   exportSection.hidden = true;
+  // Keep statsSection visible (still shows total + on-land counts)
   map.getSource('aoi').setData(emptyFC());
 
   // Reset tile statuses
@@ -692,6 +753,34 @@ $('upload-shp').addEventListener('change', async e => {
 });
 
 /* ─────────── Export ─────────── */
+/* ─────────── Tile list controls (sampling, long/short, copy) ─────────── */
+$('chk-long-name').addEventListener('change', () => {
+  if (state.intersecting.size > 0) renderTileList();
+});
+
+$('sampling-input').addEventListener('input', () => {
+  if (state.intersecting.size > 0) renderTileList();
+});
+
+$('btn-copy-tiles').addEventListener('click', () => {
+  const names = [...state.intersecting].sort();
+  const longMode = !!$('chk-long-name').checked;
+  const sampling = Math.max(1, parseInt($('sampling-input').value) || 500);
+  const continent = state.continent || '';
+  const formatted = names.map(n => longMode ? `${continent}${sampling}M_${n}` : n);
+  const pyList = '[' + formatted.map(n => `'${n}'`).join(', ') + ']';
+
+  navigator.clipboard.writeText(pyList).then(() => {
+    const btn = $('btn-copy-tiles');
+    btn.classList.add('copied');
+    btn.innerHTML = '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><polyline points="2 8 6 12 14 4"/></svg> Copied!';
+    setTimeout(() => {
+      btn.classList.remove('copied');
+      btn.innerHTML = '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="5" width="8" height="9" rx="1"/><path d="M3 11V3a1 1 0 011-1h7"/></svg> Copy';
+    }, 2000);
+  }).catch(() => {});
+});
+
 $('btn-export').addEventListener('click', () => {
   if (!state.tilesData || state.intersecting.size === 0) return;
 

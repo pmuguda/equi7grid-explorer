@@ -53,22 +53,49 @@
       </div>
     </section>
 
-    <!-- STATS -->
+    <!-- STATS — shown immediately when zone is selected -->
     <section class="panel-section" id="stats-section" hidden>
       <h2 class="section-title">2 · Tile Results</h2>
       <div class="stats-grid">
-        <div class="stat-card inside">
-          <span class="stat-num" id="stat-inside">—</span>
-          <span class="stat-lbl">Inside AOI</span>
-        </div>
         <div class="stat-card total">
           <span class="stat-num" id="stat-total">—</span>
           <span class="stat-lbl">Total tiles</span>
         </div>
+        <div class="stat-card land">
+          <span class="stat-num" id="stat-land">—</span>
+          <span class="stat-lbl">On land</span>
+        </div>
       </div>
-      <div id="tile-list-wrap" hidden>
-        <p class="section-hint tile-list-header">Intersecting tiles:</p>
-        <ul id="tile-list"></ul>
+
+      <!-- AOI results — shown once user applies an AOI -->
+      <div id="aoi-results" hidden>
+        <div class="stats-grid" style="margin-top:10px">
+          <div class="stat-card inside">
+            <span class="stat-num" id="stat-inside">—</span>
+            <span class="stat-lbl">Inside AOI</span>
+          </div>
+        </div>
+        <div id="tile-list-wrap" hidden>
+          <div class="tile-list-header-row">
+            <p class="section-hint" style="margin:0">Intersecting tiles</p>
+            <label class="name-toggle" title="Long name adds continent + sampling prefix">
+              <input type="checkbox" id="chk-long-name"> Long
+            </label>
+          </div>
+          <ul id="tile-list"></ul>
+          <div class="sampling-row">
+            <label for="sampling-input">Sampling</label>
+            <input type="number" id="sampling-input" value="500" min="1" step="1">
+            <span class="unit">m</span>
+            <button id="btn-copy-tiles" title="Copy all tile names as Python list">
+              <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+                <rect x="5" y="5" width="8" height="9" rx="1"/>
+                <path d="M3 11V3a1 1 0 011-1h7"/>
+              </svg>
+              Copy
+            </button>
+          </div>
+        </div>
       </div>
     </section>
 

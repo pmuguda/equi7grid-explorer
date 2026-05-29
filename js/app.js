@@ -345,7 +345,12 @@ function onMapLoad() {
     .then(r => r.json())
     .then(data => {
       map.getSource('zones').setData(data);
-      zonesGeoJSON = data;            // keep a copy for the 3D globe
+      zonesGeoJSON = data;
+      // Pre-compute globe zone data once — zones never change
+      zonePaths = featuresToPaths(data.features, f => ({
+        id: f.properties.id, color: f.properties.color, kind: 'zone',
+      }), 0.015);
+      zonesPolygons = prepareGlobeZones(data.features);
     })
     .catch(err => console.error('Failed to load zones:', err));
 }
@@ -733,6 +738,11 @@ let THREEC   = null;   // { LineSegments, BufferGeometry, BufferAttribute, LineB
 let tileMesh = null;   // single merged LineSegments object for ALL tiles
 let globeGroup = null; // the ThreeGlobe group (parent for correct getCoords frame)
 
+let zonePaths        = null;  // cached after first zones load — never changes
+let zonesPolygons    = null;  // cached after first zones load — never changes
+let tileMeshKey      = '';    // 'CONTINENT_TILING' — skip geometry rebuild when unchanged
+let featureVertCounts = [];   // vertex count per tile feature in the merged mesh
+
 /* -- helpers -- */
 function hexToRgba(hex, alpha) {
   const r = parseInt(hex.slice(1, 3), 16);
@@ -778,35 +788,42 @@ function ensureThree() {
   return !!(THREEC && globeGroup);
 }
 
-/* Build ONE merged LineSegments for all tiles → a single draw call (the same
- * batching MapLibre does internally for GeoJSON layers). */
+/* Build ONE merged LineSegments for all tiles → a single draw call.
+ * If the continent+tiling key is unchanged (only AOI status changed),
+ * skip the geometry rebuild and update just the color buffer in-place. */
 function buildTileMesh() {
+  if (!state.tilesData || !state.continent || !ensureThree()) return false;
+
+  const newKey = `${state.continent}_${state.tiling}`;
+
+  if (tileMesh && newKey === tileMeshKey) {
+    updateTileMeshColors();
+    return true;
+  }
+
+  // Full geometry rebuild — continent or tiling changed
   if (tileMesh) {
     tileMesh.parent && tileMesh.parent.remove(tileMesh);
     tileMesh.geometry.dispose();
     tileMesh.material.dispose();
     tileMesh = null;
   }
-  if (!state.tilesData || !state.continent || !ensureThree()) return false;
+  tileMeshKey = newKey;
+  featureVertCounts = [];
 
   const ALT = 0.05;
   const positions = [];
   const colors = [];
-
-  // Inline lat/lng → sphere xyz (three-globe GLOBE_RADIUS = 100). This matches
-  // globeInstance.getCoords() exactly but avoids its per-call overhead, and we
-  // convert each shared vertex once → ~3× faster mesh build.
   const DEG = Math.PI / 180;
   const R = 100 * (1 + ALT);
 
   for (const f of state.tilesData.features) {
     const rgb = hexToRgb01(f.properties.color);
-    const dim = f.properties.status === 'inside' ? 1.0 : 0.78;  // outside tiles dimmer
+    const dim = f.properties.status === 'inside' ? 1.0 : 0.78;
     const cr = rgb.r * dim, cg = rgb.g * dim, cb = rgb.b * dim;
 
     const ring = f.geometry.coordinates[0];
     const step = Math.max(1, Math.min(3, Math.floor((ring.length - 1) / 8)));
-    // build decimated point list (+ closing vertex), converting each once
     const xyz = [];
     const pushXY = (lng, lat) => {
       const phi = (90 - lat) * DEG, theta = (90 - lng) * DEG;
@@ -818,7 +835,8 @@ function buildTileMesh() {
     const lastIdx = ring.length - 1 - ((ring.length - 1) % step);
     if (lastIdx !== ring.length - 1) pushXY(last[0], last[1]);
 
-    // emit one line segment (vertex pair) per edge
+    featureVertCounts.push((xyz.length - 1) * 2); // 2 verts per segment
+
     for (let i = 0; i < xyz.length - 1; i++) {
       const a = xyz[i], b = xyz[i + 1];
       positions.push(a[0], a[1], a[2], b[0], b[1], b[2]);
@@ -834,6 +852,26 @@ function buildTileMesh() {
   tileMesh.renderOrder = 2;
   globeGroup.add(tileMesh);
   return true;
+}
+
+/* Update only the color buffer when AOI status changes — no geometry rebuild. */
+function updateTileMeshColors() {
+  if (!tileMesh || !state.tilesData) return;
+  const arr = tileMesh.geometry.attributes.color.array;
+  let vi = 0;
+  for (let fi = 0; fi < state.tilesData.features.length; fi++) {
+    const f = state.tilesData.features[fi];
+    const rgb = hexToRgb01(f.properties.color);
+    const dim = f.properties.status === 'inside' ? 1.0 : 0.78;
+    const cr = rgb.r * dim, cg = rgb.g * dim, cb = rgb.b * dim;
+    const count = featureVertCounts[fi] || 0;
+    for (let i = 0; i < count; i++, vi++) {
+      arr[vi * 3]     = cr;
+      arr[vi * 3 + 1] = cg;
+      arr[vi * 3 + 2] = cb;
+    }
+  }
+  tileMesh.geometry.attributes.color.needsUpdate = true;
 }
 
 /* Build transparent polygon features — invisible fill, only for Three.js click raycasting */
@@ -915,15 +953,15 @@ async function loadCountryBorders() {
  * paths so nothing breaks.
  */
 function refreshGlobeData() {
-  if (!globeInstance || !zonesGeoJSON) return;
+  if (!globeInstance || !zonesGeoJSON || !viewIs3D) return;
 
-  // Transparent polygon fills for zone click detection
-  globeInstance.polygonsData(prepareGlobeZones(zonesGeoJSON.features));
+  // Polygon fills for zone click detection — set once from cache
+  globeInstance.polygonsData(zonesPolygons || prepareGlobeZones(zonesGeoJSON.features));
 
   // Try the fast merged-mesh path for tiles; fall back to per-tile paths.
   const merged = buildTileMesh();
 
-  const zonePaths = featuresToPaths(zonesGeoJSON.features, f => ({
+  const zp = zonePaths || featuresToPaths(zonesGeoJSON.features, f => ({
     id: f.properties.id, color: f.properties.color, kind: 'zone',
   }), 0.015);
   const tilePaths = (!merged && state.tilesData && state.continent)
@@ -931,7 +969,7 @@ function refreshGlobeData() {
         color: f.properties.color, status: f.properties.status, kind: 'tile',
       }), 0.05, 3)
     : [];
-  globeInstance.pathsData([...countryPaths, ...zonePaths, ...tilePaths]);
+  globeInstance.pathsData([...countryPaths, ...zp, ...tilePaths]);
 
   // Cache tile centroids once per tile-set; labels are filtered by zoom below.
   tileCentroids = (state.tilesData && state.continent)
@@ -1107,7 +1145,6 @@ function initGlobe() {
   } catch (_) {}
 
   refreshGlobeData();
-  loadCountryBorders();   // async — calls refreshGlobeData when done
 }
 
 $('btn-2d').addEventListener('click', () => {
@@ -1116,8 +1153,10 @@ $('btn-2d').addEventListener('click', () => {
   $('btn-2d').classList.add('active');
   $('btn-3d').classList.remove('active');
 
-  // Destroy the globe entirely so its WebGL context stops competing with MapLibre
-  destroyGlobe();
+  // Pause the render loop instead of destroying — re-activating 3D is then instant
+  if (globeInstance) {
+    try { globeInstance.pauseAnimation(); } catch (_) {}
+  }
 
   $('globe-wrap').hidden = true;
   $('map').style.visibility = '';
@@ -1140,10 +1179,17 @@ $('btn-3d').addEventListener('click', () => {
   $('map').style.visibility = 'hidden';
   $('globe-wrap').hidden = false;
 
-  // Always build a fresh globe (cheap with animateIn:false; country data cached)
-  initGlobe();
+  if (globeInstance) {
+    // Resume existing globe — sync any changes made while in 2D, then unpause
+    try { globeInstance.resumeAnimation(); } catch (_) {}
+    refreshGlobeData();
+  } else {
+    // First time: build the globe and load country borders
+    initGlobe();
+    loadCountryBorders();
+  }
 
-  // If a continent was already selected, fly globe to it (centered + zoomed)
+  // If a continent was already selected, fly globe to it
   if (state.continent) {
     const v = CONTINENT_VIEWS[state.continent];
     if (v) globeInstance?.pointOfView({ lat: v.center[1], lng: v.center[0], altitude: 4.5 / v.zoom }, 500);

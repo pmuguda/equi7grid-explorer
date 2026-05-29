@@ -729,12 +729,102 @@ let zonesGeoJSON  = null;
 let inactivityTimer = null;
 const INACTIVITY_MS = 30000;
 
+// Harvested three.js classes (from globe.gl's own bundle) + merged tile mesh.
+let THREEC   = null;   // { LineSegments, BufferGeometry, BufferAttribute, LineBasicMaterial }
+let tileMesh = null;   // single merged LineSegments object for ALL tiles
+let globeGroup = null; // the ThreeGlobe group (parent for correct getCoords frame)
+
 /* -- helpers -- */
 function hexToRgba(hex, alpha) {
   const r = parseInt(hex.slice(1, 3), 16);
   const g = parseInt(hex.slice(3, 5), 16);
   const b = parseInt(hex.slice(5, 7), 16);
   return `rgba(${r},${g},${b},${alpha})`;
+}
+
+function hexToRgb01(hex) {
+  return {
+    r: parseInt(hex.slice(1, 3), 16) / 255,
+    g: parseInt(hex.slice(3, 5), 16) / 255,
+    b: parseInt(hex.slice(5, 7), 16) / 255,
+  };
+}
+
+/* Harvest three.js constructors from globe.gl's own scene (same instance =
+ * zero version-mismatch risk). Also locate the ThreeGlobe group so our merged
+ * mesh shares the exact coordinate frame getCoords() uses. */
+function ensureThree() {
+  if (THREEC && globeGroup) return true;
+  if (!globeInstance) return false;
+  const scene = globeInstance.scene();
+  let seg = null, sphereMesh = null;
+  scene.traverse(o => {
+    if (!seg && o.type === 'LineSegments' && o.material && o.material.type === 'LineBasicMaterial') seg = o;
+    if (!sphereMesh && o.geometry && o.geometry.type === 'SphereGeometry') sphereMesh = o;
+  });
+  if (seg && sphereMesh) {
+    // SphereGeometry's position attribute is a plain (non-interleaved)
+    // BufferAttribute; its base class is BufferGeometry. Harvest both safely.
+    const sphereGeomCtor = sphereMesh.geometry.constructor;
+    THREEC = {
+      LineSegments:      seg.constructor,
+      LineBasicMaterial: seg.material.constructor,
+      BufferGeometry:    Object.getPrototypeOf(sphereGeomCtor.prototype).constructor,
+      BufferAttribute:   sphereMesh.geometry.getAttribute('position').constructor,
+    };
+    // The globe sphere sits at the scene origin (identity transform), so
+    // getCoords() returns scene-space positions — add the merged mesh there.
+    globeGroup = scene;
+  }
+  return !!(THREEC && globeGroup);
+}
+
+/* Build ONE merged LineSegments for all tiles → a single draw call (the same
+ * batching MapLibre does internally for GeoJSON layers). */
+function buildTileMesh() {
+  if (tileMesh) {
+    tileMesh.parent && tileMesh.parent.remove(tileMesh);
+    tileMesh.geometry.dispose();
+    tileMesh.material.dispose();
+    tileMesh = null;
+  }
+  if (!state.tilesData || !state.continent || !ensureThree()) return false;
+
+  const ALT = 0.05;
+  const positions = [];
+  const colors = [];
+
+  for (const f of state.tilesData.features) {
+    const rgb = hexToRgb01(f.properties.color);
+    const dim = f.properties.status === 'inside' ? 1.0 : 0.78;  // outside tiles dimmer
+    const cr = rgb.r * dim, cg = rgb.g * dim, cb = rgb.b * dim;
+
+    const ring = f.geometry.coordinates[0];
+    const step = Math.max(1, Math.min(3, Math.floor((ring.length - 1) / 8)));
+    // build decimated point list (+ closing vertex)
+    const pts = [];
+    for (let i = 0; i < ring.length; i += step) pts.push(ring[i]);
+    const last = ring[ring.length - 1];
+    const tail = pts[pts.length - 1];
+    if (tail[0] !== last[0] || tail[1] !== last[1]) pts.push(last);
+
+    // emit one line segment (vertex pair) per edge
+    for (let i = 0; i < pts.length - 1; i++) {
+      const a = globeInstance.getCoords(pts[i][1],   pts[i][0],   ALT);
+      const b = globeInstance.getCoords(pts[i+1][1], pts[i+1][0], ALT);
+      positions.push(a.x, a.y, a.z, b.x, b.y, b.z);
+      colors.push(cr, cg, cb, cr, cg, cb);
+    }
+  }
+
+  const geom = new THREEC.BufferGeometry();
+  geom.setAttribute('position', new THREEC.BufferAttribute(new Float32Array(positions), 3));
+  geom.setAttribute('color',    new THREEC.BufferAttribute(new Float32Array(colors), 3));
+  const mat = new THREEC.LineBasicMaterial({ vertexColors: true, transparent: true, opacity: 0.95 });
+  tileMesh = new THREEC.LineSegments(geom, mat);
+  tileMesh.renderOrder = 2;
+  globeGroup.add(tileMesh);
+  return true;
 }
 
 /* Build transparent polygon features — invisible fill, only for Three.js click raycasting */
@@ -805,12 +895,15 @@ async function loadCountryBorders() {
 }
 
 /*
- * Visual rendering:  pathsData (country borders + zone borders + tile grid)
- * Click detection:   polygonsData with transparent fills (Three.js raycasting)
+ * Visual rendering:
+ *   • pathsData   → country borders + zone borders (few objects, fine as paths)
+ *   • tileMesh    → ALL tiles merged into ONE LineSegments = a single draw call
+ *                   (this is what makes dense T1 fast — same batching MapLibre
+ *                   does internally; thousands of tiles cost one draw call)
+ *   • polygonsData → transparent zone fills for click raycasting
  *
- * Country path objects keep stable references so three-globe's data-join does
- * NOT rebuild them when only the tiling changes. Tile rings are decimated
- * (step 4) since AEQD tiles are densified far more than needed on a sphere.
+ * If three.js can't be harvested (unexpected), tiles fall back to per-tile
+ * paths so nothing breaks.
  */
 function refreshGlobeData() {
   if (!globeInstance || !zonesGeoJSON) return;
@@ -818,15 +911,16 @@ function refreshGlobeData() {
   // Transparent polygon fills for zone click detection
   globeInstance.polygonsData(prepareGlobeZones(zonesGeoJSON.features));
 
-  // Paths layered by altitude: countries 0.005 → zones 0.015 → tiles 0.05.
-  // Tiles sit highest so even long polar-edge chords clear the sphere surface.
+  // Try the fast merged-mesh path for tiles; fall back to per-tile paths.
+  const merged = buildTileMesh();
+
   const zonePaths = featuresToPaths(zonesGeoJSON.features, f => ({
     id: f.properties.id, color: f.properties.color, kind: 'zone',
   }), 0.015);
-  const tilePaths = (state.tilesData && state.continent)
+  const tilePaths = (!merged && state.tilesData && state.continent)
     ? featuresToPaths(state.tilesData.features, f => ({
         color: f.properties.color, status: f.properties.status, kind: 'tile',
-      }), 0.05, 3)   // higher alt + lighter decimation for polar fidelity
+      }), 0.05, 3)
     : [];
   globeInstance.pathsData([...countryPaths, ...zonePaths, ...tilePaths]);
 
@@ -844,7 +938,9 @@ function refreshGlobeData() {
 
 /* ── Zoom-gated tile labels (mirrors 2D map's zoom-based label reveal) ── */
 let tileCentroids = [];
-const MAX_LABELS  = 350;   // hard cap so dense T1 never floods the GPU
+let autoRotating  = false;   // labels are suppressed while idle-spinning
+let lastLabelKey  = '';      // skip rebuilds when the visible set is unchanged
+const MAX_LABELS  = 160;     // each label is a 3D-text mesh + draw call; keep modest
 
 // Per-level: max camera altitude at which labels appear + their arc-size.
 // Smaller tiles only get labels once you've zoomed in enough for them to fit.
@@ -862,15 +958,24 @@ function angDistDeg(lat1, lng1, lat2, lng2) {
   return Math.acos(Math.min(1, Math.max(-1, c))) / r;
 }
 
+function setLabels(arr) {
+  // Rebuilding 3D-text meshes is expensive — skip if the set is identical.
+  const key = arr.map(t => t.name).join('|');
+  if (key === lastLabelKey) return;
+  lastLabelKey = key;
+  globeInstance.labelsData(arr);
+}
+
 function updateTileLabels() {
   if (!globeInstance) return;
-  if (!tileCentroids.length) { globeInstance.labelsData([]); return; }
+  // No labels while idle-spinning (constant text rebuilds would stutter)
+  if (autoRotating || !tileCentroids.length) { setLabels([]); return; }
 
   const pov = globeInstance.pointOfView();
   const cfg = LABEL_CFG[state.tiling] || LABEL_CFG.T6;
 
   // Too far out for this tiling level → no labels (not enough space)
-  if (pov.altitude > cfg.maxAlt) { globeInstance.labelsData([]); return; }
+  if (pov.altitude > cfg.maxAlt) { setLabels([]); return; }
 
   // Only label tiles inside the visible cap facing the camera
   const visR = Math.acos(1 / (1 + pov.altitude)) * 180 / Math.PI * 0.95;
@@ -882,34 +987,27 @@ function updateTileLabels() {
   }
   // Nearest-to-center first, capped, so perf stays bounded at any zoom
   visible.sort((a, b) => a._d - b._d);
-  globeInstance.labelsData(visible.slice(0, MAX_LABELS));
+  setLabels(visible.slice(0, MAX_LABELS));
 }
 
 /*
- * Throttle label recompute to at most once per 200ms. onZoom fires every
- * frame during drag/auto-rotate; recomputing the visible-label set (iterate
- * all tile centroids + sort + rebuild label sprites) every frame tanks FPS.
+ * Labels are 3D-text meshes — rebuilding/rendering them while the camera moves
+ * is what causes stutter. So we HIDE labels during any motion and show them
+ * only once the camera settles (~220ms idle). Motion stays buttery; labels pop
+ * in when you stop to read them. onZoom fires continuously during drag/zoom/
+ * spin, so each event hides labels and resets the settle timer.
  */
-let lastLabelUpdate = 0;
 let labelTimer = null;
 function scheduleTileLabelUpdate() {
-  const now = performance.now();
-  const since = now - lastLabelUpdate;
+  setLabels([]);                       // hide instantly while moving
   clearTimeout(labelTimer);
-  if (since >= 200) {
-    lastLabelUpdate = now;
-    updateTileLabels();
-  } else {
-    labelTimer = setTimeout(() => {
-      lastLabelUpdate = performance.now();
-      updateTileLabels();
-    }, 200 - since);
-  }
+  labelTimer = setTimeout(updateTileLabels, 220);
 }
 
 /* Inactivity-based auto-rotation */
 function onGlobeInteraction() {
   if (globeInstance) globeInstance.controls().autoRotate = false;
+  if (autoRotating) { autoRotating = false; updateTileLabels(); }  // restore labels
   clearTimeout(inactivityTimer);
   if (viewIs3D) startInactivityCountdown();
 }
@@ -917,7 +1015,11 @@ function onGlobeInteraction() {
 function startInactivityCountdown() {
   clearTimeout(inactivityTimer);
   inactivityTimer = setTimeout(() => {
-    if (globeInstance && viewIs3D) globeInstance.controls().autoRotate = true;
+    if (globeInstance && viewIs3D) {
+      globeInstance.controls().autoRotate = true;
+      autoRotating = true;
+      updateTileLabels();   // clears labels so the idle spin stays smooth
+    }
   }, INACTIVITY_MS);
 }
 
@@ -926,6 +1028,11 @@ function startInactivityCountdown() {
 function destroyGlobe() {
   clearTimeout(inactivityTimer);
   if (!globeInstance) return;
+  if (tileMesh) {
+    try { tileMesh.geometry.dispose(); tileMesh.material.dispose(); } catch (_) {}
+    tileMesh = null;
+  }
+  globeGroup = null;            // belongs to the destroyed scene
   try { globeInstance._destructor(); } catch (_) {}
   $('globe-wrap').innerHTML = '';   // remove the canvas
   globeInstance = null;

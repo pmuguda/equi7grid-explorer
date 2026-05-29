@@ -56,6 +56,8 @@
     <!-- STATS — shown immediately when zone is selected -->
     <section class="panel-section" id="stats-section" hidden>
       <h2 class="section-title">2 · Tile Results</h2>
+
+      <p class="stats-group-label" id="zone-group-label">Selected E7 zone</p>
       <div class="stats-grid">
         <div class="stat-card total">
           <span class="stat-num" id="stat-total">—</span>
@@ -69,14 +71,15 @@
 
       <!-- AOI results — shown once user applies an AOI -->
       <div id="aoi-results" hidden>
-        <div class="stats-grid" style="margin-top:10px">
+        <p class="stats-group-label">Within drawn / uploaded AOI</p>
+        <div class="stats-grid">
           <div class="stat-card inside">
             <span class="stat-num" id="stat-inside">—</span>
-            <span class="stat-lbl">Inside AOI</span>
+            <span class="stat-lbl">Intersecting</span>
           </div>
           <div class="stat-card land">
             <span class="stat-num" id="stat-inside-land">—</span>
-            <span class="stat-lbl">AOI on land</span>
+            <span class="stat-lbl">On land</span>
           </div>
         </div>
         <div id="tile-list-wrap" hidden>
@@ -191,6 +194,6 @@
   <script src="https://cdn.jsdelivr.net/npm/shpjs@4.0.4/dist/shp.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/globe.gl@2.30.0/dist/globe.gl.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/topojson-client@3.1.0/dist/topojson-client.min.js"></script>
-  <script src="js/app.js?v=43"></script>
+  <script src="js/app.js?v=44"></script>
 </body>
 </html>

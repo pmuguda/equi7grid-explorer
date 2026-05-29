@@ -57,6 +57,7 @@ const tilingSection  = $('tiling-section');
 const statsSection   = $('stats-section');
 const aoiResults     = $('aoi-results');
 const statLand       = $('stat-land');
+const statInsideLand = $('stat-inside-land');
 const exportSection  = $('export-section');
 const hintBanner     = $('hint-banner');
 const loader         = $('loader');
@@ -382,6 +383,7 @@ function selectContinent(id) {
   $('aoi-clear-divider').hidden = true;
   aoiResults.hidden     = true;
   statLand.textContent  = '—';
+  statInsideLand.textContent = '—';
 
   // Reset AOI source
   map.getSource('aoi').setData(emptyFC());
@@ -513,35 +515,47 @@ function computeIntersections() {
 }
 
 /* ─── Land-tile computation ─── */
-let landCountCache = {};   // key: 'CONTINENT_TILING' → count
+let landSetCache = {};     // key: 'CONTINENT_TILING' → Set<tileName> (tiles touching land)
+let landSetPromise = {};   // key → Promise<Set> (in-flight computation)
 let countryBBoxCache = null;
 
-function computeLandTiles() {
-  if (!state.tilesData || !state.continent) return;
+/* Returns a Promise<Set<tileName>> of tiles that touch any country polygon,
+ * for the current continent+tiling. Cached per key. */
+function getLandSet() {
+  if (!state.tilesData || !state.continent) return Promise.resolve(new Set());
   const key = `${state.continent}_${state.tiling}`;
-  if (landCountCache[key] !== undefined) {
-    statLand.textContent = landCountCache[key].toLocaleString();
-    return;
-  }
-  statLand.textContent = '…';
-  const tilesSnap = state.tilesData;
+  if (landSetCache[key]) return Promise.resolve(landSetCache[key]);
+  if (landSetPromise[key]) return landSetPromise[key];
 
-  fetchCountries().then(fc => {
+  const tilesSnap = state.tilesData;
+  const p = fetchCountries().then(fc => new Promise(resolve => {
     if (!countryBBoxCache) countryBBoxCache = fc.features.map(f => turf.bbox(f));
     setTimeout(() => {
-      if (state.tilesData !== tilesSnap) return;  // continent changed
-      let count = 0;
+      const set = new Set();
       for (const tile of tilesSnap.features) {
         const tb = turf.bbox(tile);
         const hits = fc.features.filter((_, i) => {
           const cb = countryBBoxCache[i];
           return !(tb[2] < cb[0] || tb[0] > cb[2] || tb[3] < cb[1] || tb[1] > cb[3]);
         });
-        if (hits.some(c => { try { return turf.booleanIntersects(tile, c); } catch (_) { return false; } })) count++;
+        if (hits.some(c => { try { return turf.booleanIntersects(tile, c); } catch (_) { return false; } }))
+          set.add(tile.properties.name);
       }
-      landCountCache[key] = count;
-      if (state.tilesData === tilesSnap) statLand.textContent = count.toLocaleString();
+      landSetCache[key] = set;
+      delete landSetPromise[key];
+      resolve(set);
     }, 0);
+  }));
+  landSetPromise[key] = p;
+  return p;
+}
+
+/* Total land tiles in the current E7 zone (stat card). */
+function computeLandTiles() {
+  if (!state.tilesData || !state.continent) return;
+  statLand.textContent = '…';
+  getLandSet().then(set => {
+    if (state.continent) statLand.textContent = set.size.toLocaleString();
   }).catch(() => { statLand.textContent = '?'; });
 }
 
@@ -580,6 +594,15 @@ function updateStats(insideSet) {
     return;
   }
   aoiResults.hidden = false;
+
+  // AOI tiles that are also on land = intersection of insideSet and the land set
+  statInsideLand.textContent = '…';
+  getLandSet().then(landSet => {
+    let n = 0;
+    insideSet.forEach(name => { if (landSet.has(name)) n++; });
+    statInsideLand.textContent = n.toLocaleString();
+  }).catch(() => { statInsideLand.textContent = '?'; });
+
   renderTileList();
 }
 

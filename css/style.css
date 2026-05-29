@@ -548,3 +548,19 @@ body.sidebar-collapsed #loader {
 body.sidebar-collapsed #view-toggle-wrap {
   left: 34px;  /* sidebar-toggle tab (18px) + 16px gap */
 }
+
+/* ── 3D Globe overlay ── */
+#globe-wrap {
+  position: fixed;
+  top: 0;
+  left: var(--sidebar-w);
+  right: 0;
+  bottom: 0;
+  background: #080c14;
+  z-index: 8;
+  transition: left 0.28s ease;
+}
+
+body.sidebar-collapsed #globe-wrap {
+  left: 0;
+}

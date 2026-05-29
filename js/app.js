@@ -324,7 +324,10 @@ function onMapLoad() {
   /* ── Load canonical Equi7Grid zone boundaries ── */
   fetch('data/zones/e7_zones.geojson')
     .then(r => r.json())
-    .then(data => map.getSource('zones').setData(data))
+    .then(data => {
+      map.getSource('zones').setData(data);
+      zonesGeoJSON = data;            // keep a copy for the 3D globe
+    })
     .catch(err => console.error('Failed to load zones:', err));
 }
 
@@ -689,8 +692,51 @@ $('sidebar-toggle').addEventListener('click', () => {
 });
 
 /* ─────────── 2D / 3D view toggle ─────────── */
-let viewIs3D = false;
-let savedCamera = null; // camera state before switching to globe
+let viewIs3D   = false;
+let savedCamera = null;
+let globeInstance = null;
+let zonesGeoJSON  = null;   // set when zones GeoJSON is fetched
+
+function hexToRgba(hex, alpha) {
+  const r = parseInt(hex.slice(1, 3), 16);
+  const g = parseInt(hex.slice(3, 5), 16);
+  const b = parseInt(hex.slice(5, 7), 16);
+  return `rgba(${r},${g},${b},${alpha})`;
+}
+
+function initGlobe() {
+  const container = $('globe-wrap');
+
+  globeInstance = Globe({ animateIn: true })(container)
+    .width(container.offsetWidth)
+    .height(container.offsetHeight)
+    .backgroundColor('#080c14')
+    .showAtmosphere(true)
+    .atmosphereColor('#2a50d0')
+    .atmosphereAltitude(0.22)
+    .globeImageUrl('https://unpkg.com/three-globe/example/img/earth-dark.jpg');
+
+  // Slow auto-spin
+  globeInstance.controls().autoRotate      = true;
+  globeInstance.controls().autoRotateSpeed = 0.4;
+
+  if (zonesGeoJSON) applyZonesToGlobe();
+}
+
+function applyZonesToGlobe() {
+  if (!globeInstance || !zonesGeoJSON) return;
+  globeInstance
+    .polygonsData(zonesGeoJSON.features)
+    .polygonCapColor(f => hexToRgba(f.properties.color, 0.65))
+    .polygonSideColor(() => 'rgba(0,0,0,0)')
+    .polygonStrokeColor(() => 'rgba(255,255,255,0.45)')
+    .polygonAltitude(0.008)
+    .polygonLabel(f =>
+      `<div style="font:600 13px system-ui;color:${f.properties.color};
+       background:rgba(0,0,0,.7);padding:4px 8px;border-radius:6px;">
+       ${CONTINENT_NAMES[f.properties.id] || f.properties.id}</div>`
+    );
+}
 
 $('btn-2d').addEventListener('click', () => {
   if (!viewIs3D) return;
@@ -698,18 +744,14 @@ $('btn-2d').addEventListener('click', () => {
   $('btn-2d').classList.add('active');
   $('btn-3d').classList.remove('active');
 
-  // Remove atmosphere layer
-  if (map.getLayer('globe-atmosphere')) map.removeLayer('globe-atmosphere');
+  // Hide globe, show map
+  $('globe-wrap').hidden = true;
+  $('map').style.visibility = '';
 
-  map.setProjection('mercator');
-  map.setMinZoom(0);
-
-  // Restore camera or just reset pitch/bearing
+  // Restore camera
   if (savedCamera) {
-    map.flyTo({ ...savedCamera, pitch: 0, bearing: 0, duration: 800 });
+    map.flyTo({ ...savedCamera, pitch: 0, bearing: 0, duration: 700 });
     savedCamera = null;
-  } else {
-    map.easeTo({ pitch: 0, bearing: 0, duration: 700 });
   }
 });
 
@@ -719,32 +761,37 @@ $('btn-3d').addEventListener('click', () => {
   $('btn-3d').classList.add('active');
   $('btn-2d').classList.remove('active');
 
-  // Save current camera so we can restore it on 2D
-  savedCamera = {
-    center: map.getCenter(),
-    zoom: map.getZoom(),
-  };
+  // Save current map camera
+  savedCamera = { center: map.getCenter(), zoom: map.getZoom() };
 
-  // Allow zooming out far enough to see the full sphere
-  map.setMinZoom(-1);
-  map.setProjection('globe');
+  // Show globe overlay, hide map canvas
+  $('map').style.visibility = 'hidden';
+  $('globe-wrap').hidden = false;
 
-  // Add a dark-space atmosphere background layer
-  if (!map.getLayer('globe-atmosphere')) {
-    map.addLayer({
-      id: 'globe-atmosphere',
-      type: 'sky',
-      paint: {
-        'sky-type': 'atmosphere',
-        'sky-atmosphere-color': 'rgba(5, 10, 25, 1)',
-        'sky-atmosphere-halo-color': 'rgba(30, 80, 200, 0.3)',
-        'sky-atmosphere-sun-intensity': 5,
-      },
-    }, map.getStyle().layers[0]?.id); // insert below everything
+  // Init globe on first use
+  if (!globeInstance) {
+    initGlobe();
+  } else if (zonesGeoJSON && !globeInstance.polygonsData().length) {
+    applyZonesToGlobe();
   }
+});
 
-  // Zoom out to show the globe as a sphere
-  map.flyTo({ center: [15, 20], zoom: 1.5, pitch: 0, bearing: 0, duration: 1000 });
+// Keep globe sized to its container when window resizes
+window.addEventListener('resize', () => {
+  if (globeInstance && viewIs3D) {
+    const c = $('globe-wrap');
+    globeInstance.width(c.offsetWidth).height(c.offsetHeight);
+  }
+});
+
+// Resize globe when sidebar collapses (container width changes)
+$('sidebar-toggle').addEventListener('click', () => {
+  if (globeInstance && viewIs3D) {
+    setTimeout(() => {
+      const c = $('globe-wrap');
+      globeInstance.width(c.offsetWidth).height(c.offsetHeight);
+    }, 300);
+  }
 });
 
 /* ─────────── Toggle continent buttons panel ─────────── */

@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Equi7Grid Explorer</title>
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/maplibre-gl@5.24.0/dist/maplibre-gl.css">
-  <link rel="stylesheet" href="css/style.css?v=7">
+  <link rel="stylesheet" href="css/style.css?v=8">
 </head>
 <body>
 
@@ -158,6 +158,9 @@
   <!-- ─────────────── MAP ─────────────── -->
   <div id="map"></div>
 
+  <!-- 3D globe overlay (shown instead of map when in 3D mode) -->
+  <div id="globe-wrap" hidden></div>
+
   <!-- 2D / 3D view toggle -->
   <div id="view-toggle-wrap">
     <button class="view-toggle-pill active" id="btn-2d" title="Flat 2D map">2D</button>
@@ -177,6 +180,7 @@
   <script src="https://cdn.jsdelivr.net/npm/maplibre-gl@5.24.0/dist/maplibre-gl.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/@turf/turf@6.5.0/turf.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/shpjs@4.0.4/dist/shp.min.js"></script>
-  <script src="js/app.js?v=10"></script>
+  <script src="https://cdn.jsdelivr.net/npm/globe.gl@2.30.0/dist/globe.gl.min.js"></script>
+  <script src="js/app.js?v=11"></script>
 </body>
 </html>

@@ -723,28 +723,41 @@ function prepareGlobeZones(features) {
   return features.map(f => ({ ...f, properties: { ...f.properties, _type: 'zone' } }));
 }
 
-let countryPaths = [];   // loaded once from world-atlas
+let countryPaths = [];   // loaded once from world-atlas, persists across globe rebuilds
 
-/* Convert GeoJSON polygons → globe.gl path objects with embedded altitude */
-function featuresToPaths(features, extraProps, alt = 0.004) {
+/*
+ * Convert GeoJSON polygons → globe.gl path objects with embedded altitude.
+ * `step` decimates dense rings (keeps every Nth vertex) to cut the amount of
+ * tube geometry three-globe must build — the single biggest perf lever.
+ */
+function featuresToPaths(features, extraProps, alt = 0.004, step = 1) {
   const paths = [];
   features.forEach(feat => {
     const geom = feat.geometry;
     if (!geom) return;
     const polys = geom.type === 'Polygon'      ? [geom.coordinates]
                 : geom.type === 'MultiPolygon' ? geom.coordinates : [];
-    polys.forEach(poly =>
-      paths.push({
-        ...extraProps(feat),
-        coords: poly[0].map(([lng, lat]) => ({ lat, lng, alt })),
-      })
-    );
+    polys.forEach(poly => {
+      const ring = poly[0];
+      const coords = [];
+      for (let i = 0; i < ring.length; i += step) {
+        coords.push({ lat: ring[i][1], lng: ring[i][0], alt });
+      }
+      // always include the closing vertex so the ring stays closed
+      const last = ring[ring.length - 1];
+      const tail = coords[coords.length - 1];
+      if (tail.lat !== last[1] || tail.lng !== last[0]) {
+        coords.push({ lat: last[1], lng: last[0], alt });
+      }
+      paths.push({ ...extraProps(feat), coords });
+    });
   });
   return paths;
 }
 
-/* Load 110m country borders once and store as paths */
+/* Load 110m country borders once; cached in countryPaths across globe rebuilds */
 async function loadCountryBorders() {
+  if (countryPaths.length) { refreshGlobeData(); return; }
   try {
     const res  = await fetch('https://cdn.jsdelivr.net/npm/world-atlas@2.0.2/countries-110m.json');
     const topo = await res.json();
@@ -752,7 +765,7 @@ async function loadCountryBorders() {
     countryPaths = featuresToPaths(
       countries,
       () => ({ kind: 'country', color: 'rgba(255,255,255,0.70)' }),
-      0.005   // clearly above surface but below zones/tiles
+      0.005
     );
     refreshGlobeData();
   } catch (e) {
@@ -764,8 +777,9 @@ async function loadCountryBorders() {
  * Visual rendering:  pathsData (country borders + zone borders + tile grid)
  * Click detection:   polygonsData with transparent fills (Three.js raycasting)
  *
- * All paths have embedded altitude so they render ABOVE the globe texture,
- * not inside the sphere surface (alt 0 causes z-fighting with the texture).
+ * Country path objects keep stable references so three-globe's data-join does
+ * NOT rebuild them when only the tiling changes. Tile rings are decimated
+ * (step 4) since AEQD tiles are densified far more than needed on a sphere.
  */
 function refreshGlobeData() {
   if (!globeInstance || !zonesGeoJSON) return;
@@ -773,14 +787,14 @@ function refreshGlobeData() {
   // Transparent polygon fills for zone click detection
   globeInstance.polygonsData(prepareGlobeZones(zonesGeoJSON.features));
 
-  // Paths layered: countries (alt 0.005) → zones (alt 0.015) → tiles (alt 0.025)
+  // Paths layered by altitude: countries 0.005 → zones 0.015 → tiles 0.025
   const zonePaths = featuresToPaths(zonesGeoJSON.features, f => ({
     id: f.properties.id, color: f.properties.color, kind: 'zone',
   }), 0.015);
   const tilePaths = (state.tilesData && state.continent)
     ? featuresToPaths(state.tilesData.features, f => ({
         color: f.properties.color, status: f.properties.status, kind: 'tile',
-      }), 0.025)
+      }), 0.025, 4)   // ← decimate dense tile rings 4×
     : [];
   globeInstance.pathsData([...countryPaths, ...zonePaths, ...tilePaths]);
 }
@@ -799,16 +813,27 @@ function startInactivityCountdown() {
   }, INACTIVITY_MS);
 }
 
+/* Fully tear down the globe and free its WebGL context (prevents it from
+ * competing with MapLibre's renderer and slowing 2D after a 3D session). */
+function destroyGlobe() {
+  clearTimeout(inactivityTimer);
+  if (!globeInstance) return;
+  try { globeInstance._destructor(); } catch (_) {}
+  $('globe-wrap').innerHTML = '';   // remove the canvas
+  globeInstance = null;
+}
+
 function initGlobe() {
   const container = $('globe-wrap');
 
-  globeInstance = Globe({ animateIn: true })(container)
+  globeInstance = Globe({ animateIn: false })(container)
     .width(container.offsetWidth)
     .height(container.offsetHeight)
     .backgroundColor('#0d1117')
     .showAtmosphere(true)
     .atmosphereColor('#2255cc')
     .atmosphereAltitude(0.15)
+    .pathResolution(4)   // coarser interpolation → lighter geometry, faster
     .globeImageUrl('https://cdn.jsdelivr.net/npm/three-globe/example/img/earth-dark.jpg')
 
     /* ── Transparent polygon fills — only for Three.js click raycasting ── */
@@ -871,14 +896,12 @@ $('btn-2d').addEventListener('click', () => {
   $('btn-2d').classList.add('active');
   $('btn-3d').classList.remove('active');
 
-  clearTimeout(inactivityTimer);
-  if (globeInstance) {
-    globeInstance.controls().autoRotate = false;
-    globeInstance.pauseAnimation();   // ← stop Three.js render loop, free GPU
-  }
+  // Destroy the globe entirely so its WebGL context stops competing with MapLibre
+  destroyGlobe();
 
   $('globe-wrap').hidden = true;
   $('map').style.visibility = '';
+  map.resize();
 
   if (savedCamera) {
     map.flyTo({ ...savedCamera, pitch: 0, bearing: 0, duration: 700 });
@@ -897,13 +920,8 @@ $('btn-3d').addEventListener('click', () => {
   $('map').style.visibility = 'hidden';
   $('globe-wrap').hidden = false;
 
-  if (!globeInstance) {
-    initGlobe();
-  } else {
-    globeInstance.resumeAnimation();  // ← restart Three.js render loop
-    refreshGlobeData();
-    startInactivityCountdown();
-  }
+  // Always build a fresh globe (cheap with animateIn:false; country data cached)
+  initGlobe();
 
   // If a continent was already selected, fly globe to it
   if (state.continent) {

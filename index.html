@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Equi7Grid Explorer</title>
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/maplibre-gl@5.24.0/dist/maplibre-gl.css">
-  <link rel="stylesheet" href="css/style.css?v=9">
+  <link rel="stylesheet" href="css/style.css?v=10">
 </head>
 <body>
 
@@ -78,9 +78,10 @@
         <div id="tile-list-wrap" hidden>
           <div class="tile-list-header-row">
             <p class="section-hint" style="margin:0">Intersecting tiles</p>
-            <label class="name-toggle" title="Long name adds continent + sampling prefix">
-              <input type="checkbox" id="chk-long-name"> Long
-            </label>
+            <div class="name-toggle-pills">
+              <button class="name-pill active" id="btn-name-long" title="Long: EU500M_E006N006T6">Long</button>
+              <button class="name-pill" id="btn-name-short" title="Short: E006N006T6">Short</button>
+            </div>
           </div>
           <ul id="tile-list"></ul>
           <div class="sampling-row">
@@ -186,6 +187,6 @@
   <script src="https://cdn.jsdelivr.net/npm/shpjs@4.0.4/dist/shp.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/globe.gl@2.30.0/dist/globe.gl.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/topojson-client@3.1.0/dist/topojson-client.min.js"></script>
-  <script src="js/app.js?v=40"></script>
+  <script src="js/app.js?v=41"></script>
 </body>
 </html>

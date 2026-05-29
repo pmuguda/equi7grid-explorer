@@ -36,7 +36,19 @@ let state = {
   drawMode:    null,      // null | 'bbox' | 'polygon'
   bboxAnchor:  null,      // [lng, lat] first corner for bbox
   polyVerts:   [],        // accumulated polygon vertices
+  longName:    true,      // tile-name format: true = EU500M_E006N006T6, false = E006N006T6
 };
+
+/* Format a raw tile name (e.g. "EU_E006N006T6") for display.
+ *  short → strip the "XX_" continent prefix  → "E006N006T6"
+ *  long  → "<CONT><SAMPLING>M_<grid>"        → "EU500M_E006N006T6"
+ */
+function formatTileName(rawName) {
+  const grid = rawName.replace(/^[A-Z]{2}_/, '');   // drop continent prefix
+  if (!state.longName) return grid;
+  const sampling = Math.max(1, parseInt($('sampling-input')?.value) || 500);
+  return `${state.continent || ''}${sampling}M_${grid}`;
+}
 
 
 /* ── DOM refs ── */
@@ -539,11 +551,7 @@ function renderTileList() {
   if (names.length === 0) { tileListWrap.hidden = true; return; }
   tileListWrap.hidden = false;
 
-  const longMode = !!$('chk-long-name')?.checked;
-  const sampling = Math.max(1, parseInt($('sampling-input')?.value) || 500);
-  const continent = state.continent || '';
-
-  const fmt = name => longMode ? `${continent}${sampling}M_${name}` : name;
+  const fmt = formatTileName;
 
   const MAX_HEAD = 6, MAX_TAIL = 3, THRESHOLD = MAX_HEAD + MAX_TAIL + 1;
   tileList.innerHTML = '';
@@ -754,9 +762,14 @@ $('upload-shp').addEventListener('change', async e => {
 
 /* ─────────── Export ─────────── */
 /* ─────────── Tile list controls (sampling, long/short, copy) ─────────── */
-$('chk-long-name').addEventListener('change', () => {
+function setNameMode(long) {
+  state.longName = long;
+  $('btn-name-long').classList.toggle('active', long);
+  $('btn-name-short').classList.toggle('active', !long);
   if (state.intersecting.size > 0) renderTileList();
-});
+}
+$('btn-name-long').addEventListener('click', () => setNameMode(true));
+$('btn-name-short').addEventListener('click', () => setNameMode(false));
 
 $('sampling-input').addEventListener('input', () => {
   if (state.intersecting.size > 0) renderTileList();
@@ -764,10 +777,7 @@ $('sampling-input').addEventListener('input', () => {
 
 $('btn-copy-tiles').addEventListener('click', () => {
   const names = [...state.intersecting].sort();
-  const longMode = !!$('chk-long-name').checked;
-  const sampling = Math.max(1, parseInt($('sampling-input').value) || 500);
-  const continent = state.continent || '';
-  const formatted = names.map(n => longMode ? `${continent}${sampling}M_${n}` : n);
+  const formatted = names.map(formatTileName);
   const pyList = '[' + formatted.map(n => `'${n}'`).join(', ') + ']';
 
   navigator.clipboard.writeText(pyList).then(() => {

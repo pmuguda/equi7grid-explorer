@@ -334,18 +334,29 @@ body { display: flex; background: var(--bg); color: var(--text); font-size: 14px
   margin-bottom: 6px;
 }
 
-.name-toggle {
+/* ── Long / Short name pill toggle (mirrors the 2D/3D pills) ── */
+.name-toggle-pills {
   display: flex;
-  align-items: center;
-  gap: 4px;
-  font-size: 11px;
-  color: var(--muted);
-  cursor: pointer;
-  user-select: none;
-  white-space: nowrap;
+  border-radius: 6px;
+  border: 1px solid var(--border);
+  overflow: hidden;
   flex-shrink: 0;
 }
-.name-toggle input { accent-color: var(--accent); width: 12px; height: 12px; cursor: pointer; }
+.name-pill {
+  padding: 3px 9px;
+  font-size: 10.5px;
+  font-weight: 700;
+  border: none;
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s;
+  letter-spacing: 0.04em;
+  line-height: 1.4;
+}
+.name-pill + .name-pill { border-left: 1px solid var(--border); }
+.name-pill.active { background: var(--accent); color: #fff; }
+.name-pill:not(.active):hover { color: var(--text); background: rgba(255,255,255,0.07); }
 
 /* ── Truncation ellipsis row ── */
 #tile-list li.tile-ellipsis {
@@ -353,6 +364,9 @@ body { display: flex; background: var(--bg); color: var(--text); font-size: 14px
   font-style: italic;
   text-align: center;
   background: none;
+  border: none;
+  padding: 4px 0;
+  letter-spacing: 0.05em;
 }
 
 /* ── Sampling row (input + copy) ── */
@@ -397,25 +411,24 @@ body { display: flex; background: var(--bg); color: var(--text); font-size: 14px
 
 #tile-list {
   list-style: none;
-  max-height: 140px;
-  overflow-y: auto;
-  scrollbar-width: thin;
-  scrollbar-color: var(--border) transparent;
   display: flex;
   flex-direction: column;
   gap: 2px;
+  /* No max-height: truncation keeps count manageable (6 + ellipsis + 3) */
 }
 
 #tile-list li {
-  font-size: 11px;
+  font-size: 11.5px;
   font-family: 'SF Mono', 'Fira Code', monospace;
-  padding: 3px 6px;
-  border-radius: 4px;
+  padding: 5px 8px;
+  border-radius: 5px;
   background: var(--bg);
-  color: var(--muted);
+  color: var(--text);
+  border: 1px solid var(--border);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+  letter-spacing: 0.01em;
 }
 
 /* ── Export button ── */

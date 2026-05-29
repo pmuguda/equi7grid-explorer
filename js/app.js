@@ -382,11 +382,12 @@ function selectContinent(id) {
   // Reset AOI source
   map.getSource('aoi').setData(emptyFC());
 
-  // Zoom to continent (map or globe)
+  // Zoom to continent (map or globe), centering on the zone like 2D
   if (viewIs3D && globeInstance) {
     const v = CONTINENT_VIEWS[id];
-    if (v) globeInstance.pointOfView({ lat: v.center[1], lng: v.center[0], altitude: 2.2 }, 900);
-    onGlobeInteraction(); // stop rotation, restart inactivity timer
+    // Derive a globe altitude from the 2D zoom so framing matches (bigger
+    // continents → higher altitude). Lower altitude = more zoomed in.
+    if (v) globeInstance.pointOfView({ lat: v.center[1], lng: v.center[0], altitude: 4.5 / v.zoom }, 900);
   } else {
     zoomToContinent(id);
   }
@@ -726,8 +727,6 @@ let viewIs3D    = false;
 let savedCamera = null;
 let globeInstance = null;
 let zonesGeoJSON  = null;
-let inactivityTimer = null;
-const INACTIVITY_MS = 30000;
 
 // Harvested three.js classes (from globe.gl's own bundle) + merged tile mesh.
 let THREEC   = null;   // { LineSegments, BufferGeometry, BufferAttribute, LineBasicMaterial }
@@ -938,7 +937,6 @@ function refreshGlobeData() {
 
 /* ── Zoom-gated tile labels (mirrors 2D map's zoom-based label reveal) ── */
 let tileCentroids = [];
-let autoRotating  = false;   // labels are suppressed while idle-spinning
 let lastLabelKey  = '';      // skip rebuilds when the visible set is unchanged
 const MAX_LABELS  = 160;     // each label is a 3D-text mesh + draw call; keep modest
 
@@ -968,8 +966,7 @@ function setLabels(arr) {
 
 function updateTileLabels() {
   if (!globeInstance) return;
-  // No labels while idle-spinning (constant text rebuilds would stutter)
-  if (autoRotating || !tileCentroids.length) { setLabels([]); return; }
+  if (!tileCentroids.length) { setLabels([]); return; }
 
   const pov = globeInstance.pointOfView();
   const cfg = LABEL_CFG[state.tiling] || LABEL_CFG.T6;
@@ -1004,29 +1001,9 @@ function scheduleTileLabelUpdate() {
   labelTimer = setTimeout(updateTileLabels, 220);
 }
 
-/* Inactivity-based auto-rotation */
-function onGlobeInteraction() {
-  if (globeInstance) globeInstance.controls().autoRotate = false;
-  if (autoRotating) { autoRotating = false; updateTileLabels(); }  // restore labels
-  clearTimeout(inactivityTimer);
-  if (viewIs3D) startInactivityCountdown();
-}
-
-function startInactivityCountdown() {
-  clearTimeout(inactivityTimer);
-  inactivityTimer = setTimeout(() => {
-    if (globeInstance && viewIs3D) {
-      globeInstance.controls().autoRotate = true;
-      autoRotating = true;
-      updateTileLabels();   // clears labels so the idle spin stays smooth
-    }
-  }, INACTIVITY_MS);
-}
-
 /* Fully tear down the globe and free its WebGL context (prevents it from
  * competing with MapLibre's renderer and slowing 2D after a 3D session). */
 function destroyGlobe() {
-  clearTimeout(inactivityTimer);
   if (!globeInstance) return;
   if (tileMesh) {
     try { tileMesh.geometry.dispose(); tileMesh.material.dispose(); } catch (_) {}
@@ -1108,10 +1085,10 @@ function initGlobe() {
     .labelColor(() => 'rgba(255,255,255,0.92)')
     .labelResolution(1)
     .labelsTransitionDuration(0)
-    .onZoom(scheduleTileLabelUpdate);   // re-evaluate labels as camera moves
+    .onZoom(scheduleTileLabelUpdate);   // hide/show labels as camera moves
 
-  globeInstance.controls().autoRotate      = false;
-  globeInstance.controls().autoRotateSpeed = 0.35;
+  // Manual rotation only — no auto-rotation (it caused continuous re-renders).
+  globeInstance.controls().autoRotate = false;
 
   // Cap pixel ratio: retina screens render 4× the pixels, which tanks FPS for
   // marginal sharpness. 1.5 keeps it crisp while greatly lightening the GPU.
@@ -1119,13 +1096,8 @@ function initGlobe() {
     globeInstance.renderer().setPixelRatio(Math.min(window.devicePixelRatio || 1, 1.5));
   } catch (_) {}
 
-  const wrap = $('globe-wrap');
-  wrap.addEventListener('pointerdown', onGlobeInteraction);
-  wrap.addEventListener('wheel',       onGlobeInteraction, { passive: true });
-
   refreshGlobeData();
   loadCountryBorders();   // async — calls refreshGlobeData when done
-  startInactivityCountdown();
 }
 
 $('btn-2d').addEventListener('click', () => {
@@ -1161,10 +1133,10 @@ $('btn-3d').addEventListener('click', () => {
   // Always build a fresh globe (cheap with animateIn:false; country data cached)
   initGlobe();
 
-  // If a continent was already selected, fly globe to it
+  // If a continent was already selected, fly globe to it (centered + zoomed)
   if (state.continent) {
     const v = CONTINENT_VIEWS[state.continent];
-    if (v) globeInstance?.pointOfView({ lat: v.center[1], lng: v.center[0], altitude: 2.2 }, 900);
+    if (v) globeInstance?.pointOfView({ lat: v.center[1], lng: v.center[0], altitude: 4.5 / v.zoom }, 900);
   }
 });
 

@@ -803,26 +803,67 @@ function refreshGlobeData() {
     : [];
   globeInstance.pathsData([...countryPaths, ...zonePaths, ...tilePaths]);
 
-  // Tile-name labels (mirrors the 2D map). Skip when there are too many tiles
-  // (dense T1) — labels would overlap into an unreadable mass and hurt perf.
-  globeInstance.labelsData(buildTileLabels());
+  // Cache tile centroids once per tile-set; labels are filtered by zoom below.
+  tileCentroids = (state.tilesData && state.continent)
+    ? state.tilesData.features.map(f => {
+        const ring = f.geometry.coordinates[0];
+        let sx = 0, sy = 0, n = 0;
+        for (let i = 0; i < ring.length - 1; i++) { sx += ring[i][0]; sy += ring[i][1]; n++; }
+        return { name: f.properties.name, lat: sy / n, lng: sx / n };
+      })
+    : [];
+  updateTileLabels();
 }
 
-/* Build centroid label objects for the current tile set */
-function buildTileLabels() {
-  if (!state.tilesData || !state.continent) return [];
-  const feats = state.tilesData.features;
-  if (feats.length > 600) return [];   // too dense to label legibly
+/* ── Zoom-gated tile labels (mirrors 2D map's zoom-based label reveal) ── */
+let tileCentroids = [];
+const MAX_LABELS  = 350;   // hard cap so dense T1 never floods the GPU
 
-  // label arc-size scales with tiling level (kept small to avoid overlap)
-  const size = state.tiling === 'T6' ? 0.32 : state.tiling === 'T3' ? 0.16 : 0.09;
+// Per-level: max camera altitude at which labels appear + their arc-size.
+// Smaller tiles only get labels once you've zoomed in enough for them to fit.
+const LABEL_CFG = {
+  T6: { maxAlt: 3.0,  size: 0.32 },
+  T3: { maxAlt: 1.1,  size: 0.16 },
+  T1: { maxAlt: 0.40, size: 0.09 },
+};
 
-  return feats.map(f => {
-    const ring = f.geometry.coordinates[0];
-    let sx = 0, sy = 0, n = 0;
-    for (let i = 0; i < ring.length - 1; i++) { sx += ring[i][0]; sy += ring[i][1]; n++; }
-    return { name: f.properties.name, lng: sx / n, lat: sy / n, size };
-  });
+/* great-circle angular distance between two lat/lng points, in degrees */
+function angDistDeg(lat1, lng1, lat2, lng2) {
+  const r = Math.PI / 180;
+  const a = lat1 * r, b = lat2 * r, d = (lng2 - lng1) * r;
+  const c = Math.sin(a) * Math.sin(b) + Math.cos(a) * Math.cos(b) * Math.cos(d);
+  return Math.acos(Math.min(1, Math.max(-1, c))) / r;
+}
+
+function updateTileLabels() {
+  if (!globeInstance) return;
+  if (!tileCentroids.length) { globeInstance.labelsData([]); return; }
+
+  const pov = globeInstance.pointOfView();
+  const cfg = LABEL_CFG[state.tiling] || LABEL_CFG.T6;
+
+  // Too far out for this tiling level → no labels (not enough space)
+  if (pov.altitude > cfg.maxAlt) { globeInstance.labelsData([]); return; }
+
+  // Only label tiles inside the visible cap facing the camera
+  const visR = Math.acos(1 / (1 + pov.altitude)) * 180 / Math.PI * 0.95;
+
+  const visible = [];
+  for (const t of tileCentroids) {
+    const dist = angDistDeg(pov.lat, pov.lng, t.lat, t.lng);
+    if (dist <= visR) visible.push({ ...t, size: cfg.size, _d: dist });
+  }
+  // Nearest-to-center first, capped, so perf stays bounded at any zoom
+  visible.sort((a, b) => a._d - b._d);
+  globeInstance.labelsData(visible.slice(0, MAX_LABELS));
+}
+
+/* throttle label recompute to one per animation frame during zoom/pan */
+let labelUpdateQueued = false;
+function scheduleTileLabelUpdate() {
+  if (labelUpdateQueued) return;
+  labelUpdateQueued = true;
+  requestAnimationFrame(() => { labelUpdateQueued = false; updateTileLabels(); });
 }
 
 /* Inactivity-based auto-rotation */
@@ -912,7 +953,8 @@ function initGlobe() {
     .labelDotRadius(0)            // no marker dot, just text
     .labelColor(() => 'rgba(255,255,255,0.92)')
     .labelResolution(1)
-    .labelsTransitionDuration(0);
+    .labelsTransitionDuration(0)
+    .onZoom(scheduleTileLabelUpdate);   // re-evaluate labels as camera moves
 
   globeInstance.controls().autoRotate      = false;
   globeInstance.controls().autoRotateSpeed = 0.35;

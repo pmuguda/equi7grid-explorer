@@ -787,14 +787,15 @@ function refreshGlobeData() {
   // Transparent polygon fills for zone click detection
   globeInstance.polygonsData(prepareGlobeZones(zonesGeoJSON.features));
 
-  // Paths layered by altitude: countries 0.005 → zones 0.015 → tiles 0.025
+  // Paths layered by altitude: countries 0.005 → zones 0.015 → tiles 0.05.
+  // Tiles sit highest so even long polar-edge chords clear the sphere surface.
   const zonePaths = featuresToPaths(zonesGeoJSON.features, f => ({
     id: f.properties.id, color: f.properties.color, kind: 'zone',
   }), 0.015);
   const tilePaths = (state.tilesData && state.continent)
     ? featuresToPaths(state.tilesData.features, f => ({
         color: f.properties.color, status: f.properties.status, kind: 'tile',
-      }), 0.025, 4)   // ← decimate dense tile rings 4×
+      }), 0.05, 3)   // higher alt + lighter decimation for polar fidelity
     : [];
   globeInstance.pathsData([...countryPaths, ...zonePaths, ...tilePaths]);
 }
@@ -861,8 +862,7 @@ function initGlobe() {
     .pathColor(d => {
       if (d.kind === 'country') return d.color;
       if (d.kind === 'tile') {
-        // More transparent for outside tiles (user request)
-        return d.status === 'inside' ? d.color : hexToRgba(d.color, 0.45);
+        return d.status === 'inside' ? d.color : hexToRgba(d.color, 0.70);
       }
       if (d.id === state.continent) return d.color;
       return hexToRgba(d.color, state.continent ? 0.50 : 0.85);

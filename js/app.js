@@ -450,7 +450,13 @@ function applyAOI(geojson, zoomTo = true) {
 
   if (zoomTo) {
     const bb = turf.bbox(feat);
-    map.fitBounds([[bb[0], bb[1]], [bb[2], bb[3]]], { padding: 80, duration: 600 });
+    if (viewIs3D && globeInstance) {
+      const lat = (bb[1] + bb[3]) / 2, lng = (bb[0] + bb[2]) / 2;
+      const span = Math.max(bb[2] - bb[0], bb[3] - bb[1]);
+      globeInstance.pointOfView({ lat, lng, altitude: Math.max(0.1, Math.min(3, span / 55)) }, 600);
+    } else {
+      map.fitBounds([[bb[0], bb[1]], [bb[2], bb[3]]], { padding: 80, duration: 600 });
+    }
   }
 
   computeIntersections();
@@ -516,7 +522,7 @@ $('btn-bbox').addEventListener('click', () => {
   state.drawMode = 'bbox';
   state.bboxAnchor = null;
   $('btn-bbox').classList.add('active');
-  document.getElementById('map').classList.add('drawing');
+  document.getElementById(viewIs3D ? 'globe-wrap' : 'map').classList.add('drawing');
   showHint('Click to set first corner of rectangle · Esc to cancel');
 });
 
@@ -527,7 +533,7 @@ $('btn-poly').addEventListener('click', () => {
   state.drawMode = 'polygon';
   state.polyVerts = [];
   $('btn-poly').classList.add('active');
-  document.getElementById('map').classList.add('drawing');
+  document.getElementById(viewIs3D ? 'globe-wrap' : 'map').classList.add('drawing');
   showHint('Click to add vertices · Double-click to finish · Esc to cancel');
 });
 
@@ -560,8 +566,8 @@ function handleMapClick(e) {
 
 function handleDblClick(e) {
   if (state.drawMode !== 'polygon') return;
-  e.preventDefault();
-  e.originalEvent.stopPropagation();
+  if (e.preventDefault) e.preventDefault();
+  if (e.originalEvent?.stopPropagation) e.originalEvent.stopPropagation();
 
   if (state.polyVerts.length < 3) {
     showHint('Need at least 3 points to close polygon');
@@ -625,6 +631,7 @@ function disableDrawMode() {
   $('btn-bbox').classList.remove('active');
   $('btn-poly').classList.remove('active');
   document.getElementById('map').classList.remove('drawing');
+  document.getElementById('globe-wrap').classList.remove('drawing');
   hideHint();
   clearPreview();
 }
@@ -1187,6 +1194,26 @@ function initGlobe() {
     globeInstance.renderer().setPixelRatio(Math.min(window.devicePixelRatio || 1, 1.5));
   } catch (_) {}
 
+  /* ── Drawing on the globe — mirrors the 2D map draw handlers ── */
+  try {
+    const gc = globeInstance.renderer().domElement;
+    gc.addEventListener('click', e => {
+      if (!state.drawMode) return;
+      const c = globeInstance.toGlobeCoords(e.offsetX, e.offsetY);
+      if (c) handleMapClick({ lngLat: { lng: c.lng, lat: c.lat } });
+    });
+    gc.addEventListener('dblclick', e => {
+      if (!state.drawMode) return;
+      const c = globeInstance.toGlobeCoords(e.offsetX, e.offsetY);
+      if (c) handleDblClick({ lngLat: { lng: c.lng, lat: c.lat }, originalEvent: e });
+    });
+    gc.addEventListener('mousemove', e => {
+      if (!state.drawMode) return;
+      const c = globeInstance.toGlobeCoords(e.offsetX, e.offsetY);
+      if (c) handleMouseMove({ lngLat: { lng: c.lng, lat: c.lat } });
+    });
+  } catch (_) {}
+
   refreshGlobeData();
 }
 
@@ -1200,10 +1227,6 @@ $('btn-2d').addEventListener('click', () => {
   if (globeInstance) {
     try { globeInstance.pauseAnimation(); } catch (_) {}
   }
-
-  // Re-enable draw tools when returning to 2D
-  $('btn-bbox').disabled = false;
-  $('btn-poly').disabled = false;
 
   $('globe-wrap').hidden = true;
   $('map').style.visibility = '';
@@ -1225,10 +1248,6 @@ $('btn-3d').addEventListener('click', () => {
 
   $('map').style.visibility = 'hidden';
   $('globe-wrap').hidden = false;
-
-  // Draw tools only work on the 2D map canvas
-  $('btn-bbox').disabled = true;
-  $('btn-poly').disabled = true;
 
   if (globeInstance) {
     // Resume existing globe — sync any changes made while in 2D, then unpause

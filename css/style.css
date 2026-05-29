@@ -432,6 +432,7 @@ body { display: flex; background: var(--bg); color: var(--text); font-size: 14px
 .maplibregl-canvas { cursor: grab; }
 .maplibregl-canvas:active { cursor: grabbing; }
 .drawing .maplibregl-canvas { cursor: crosshair !important; }
+#globe-wrap.drawing canvas  { cursor: crosshair !important; }
 
 /* ── Scrollbar styling ── */
 #sidebar::-webkit-scrollbar { width: 4px; }

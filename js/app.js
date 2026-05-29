@@ -690,13 +690,27 @@ $('sidebar-toggle').addEventListener('click', () => {
 
 /* ─────────── 2D / 3D view toggle ─────────── */
 let viewIs3D = false;
+let savedCamera = null; // camera state before switching to globe
 
 $('btn-2d').addEventListener('click', () => {
   if (!viewIs3D) return;
   viewIs3D = false;
   $('btn-2d').classList.add('active');
   $('btn-3d').classList.remove('active');
-  map.easeTo({ pitch: 0, bearing: 0, duration: 700 });
+
+  // Remove atmosphere layer
+  if (map.getLayer('globe-atmosphere')) map.removeLayer('globe-atmosphere');
+
+  map.setProjection('mercator');
+  map.setMinZoom(0);
+
+  // Restore camera or just reset pitch/bearing
+  if (savedCamera) {
+    map.flyTo({ ...savedCamera, pitch: 0, bearing: 0, duration: 800 });
+    savedCamera = null;
+  } else {
+    map.easeTo({ pitch: 0, bearing: 0, duration: 700 });
+  }
 });
 
 $('btn-3d').addEventListener('click', () => {
@@ -704,7 +718,33 @@ $('btn-3d').addEventListener('click', () => {
   viewIs3D = true;
   $('btn-3d').classList.add('active');
   $('btn-2d').classList.remove('active');
-  map.easeTo({ pitch: 60, bearing: -20, duration: 800 });
+
+  // Save current camera so we can restore it on 2D
+  savedCamera = {
+    center: map.getCenter(),
+    zoom: map.getZoom(),
+  };
+
+  // Allow zooming out far enough to see the full sphere
+  map.setMinZoom(-1);
+  map.setProjection('globe');
+
+  // Add a dark-space atmosphere background layer
+  if (!map.getLayer('globe-atmosphere')) {
+    map.addLayer({
+      id: 'globe-atmosphere',
+      type: 'sky',
+      paint: {
+        'sky-type': 'atmosphere',
+        'sky-atmosphere-color': 'rgba(5, 10, 25, 1)',
+        'sky-atmosphere-halo-color': 'rgba(30, 80, 200, 0.3)',
+        'sky-atmosphere-sun-intensity': 5,
+      },
+    }, map.getStyle().layers[0]?.id); // insert below everything
+  }
+
+  // Zoom out to show the globe as a sphere
+  map.flyTo({ center: [15, 20], zoom: 1.5, pitch: 0, bearing: 0, duration: 1000 });
 });
 
 /* ─────────── Toggle continent buttons panel ─────────── */

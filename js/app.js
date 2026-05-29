@@ -1057,6 +1057,45 @@ function destroyGlobe() {
   globeInstance = null;
 }
 
+/* Convert Mercator tile row → latitude (degrees) */
+function tile2lat(y, z) {
+  const n = Math.PI - (2 * Math.PI * y) / Math.pow(2, z);
+  return (180 / Math.PI) * Math.atan(0.5 * (Math.exp(n) - Math.exp(-n)));
+}
+
+/*
+ * Composite CARTO dark-matter-nolabels raster tiles onto a canvas then use
+ * it as the globe texture — same base style as the 2D MapLibre basemap.
+ * Canvas approach avoids any z-fighting between tile quads and the sphere.
+ * Zoom 2 (4×4 = 16 tiles) gives enough detail to show coastlines and borders
+ * without over-resolving individual roads that bleed through zone fills.
+ */
+async function initCartoBgTiles() {
+  const ZOOM = 2, N = Math.pow(2, ZOOM), TILE = 256;
+  const canvas = document.createElement('canvas');
+  canvas.width  = N * TILE;   // 1024 px
+  canvas.height = N * TILE;   // 1024 px (square Mercator composite)
+  const ctx = canvas.getContext('2d');
+  ctx.fillStyle = '#0b1a2b';
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+  const loads = [];
+  for (let x = 0; x < N; x++) {
+    for (let y = 0; y < N; y++) {
+      loads.push(new Promise(resolve => {
+        const img = new Image();
+        img.crossOrigin = 'anonymous';
+        img.onload  = () => { ctx.drawImage(img, x * TILE, y * TILE, TILE, TILE); resolve(); };
+        img.onerror = () => resolve();
+        img.src = `https://basemaps.cartocdn.com/dark_matter_nolabels/${ZOOM}/${x}/${y}.png`;
+      }));
+    }
+  }
+
+  await Promise.all(loads);
+  globeInstance.globeImageUrl(canvas.toDataURL('image/jpeg', 0.90));
+}
+
 function initGlobe() {
   const container = $('globe-wrap');
 
@@ -1067,8 +1106,11 @@ function initGlobe() {
     .showAtmosphere(true)
     .atmosphereColor('#2255cc')
     .atmosphereAltitude(0.15)
-    .pathResolution(4)   // coarser interpolation → lighter geometry, faster
+    .pathResolution(4)
+    // earth-dark shows immediately; CARTO canvas composite replaces it via
+    // onGlobeReady once all 16 tiles are fetched and drawn onto a canvas.
     .globeImageUrl('https://cdn.jsdelivr.net/npm/three-globe/example/img/earth-dark.jpg')
+    .onGlobeReady(initCartoBgTiles)
 
     /* ── Translucent zone fills — colored like the 2D map (also used for
      *    Three.js click raycasting). Selected zone fills a touch stronger,

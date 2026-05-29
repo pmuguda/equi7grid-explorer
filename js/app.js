@@ -775,20 +775,50 @@ $('sampling-input').addEventListener('input', () => {
   if (state.intersecting.size > 0) renderTileList();
 });
 
+/* Copy text to clipboard with a fallback for non-secure / blocked contexts.
+ * The async Clipboard API silently fails in some browsers/iframes, so we
+ * fall back to a hidden <textarea> + execCommand('copy') which always works
+ * inside a user-gesture handler. Returns a Promise<boolean>. */
+function copyToClipboard(text) {
+  if (navigator.clipboard && window.isSecureContext) {
+    return navigator.clipboard.writeText(text).then(() => true).catch(() => fallbackCopy(text));
+  }
+  return Promise.resolve(fallbackCopy(text));
+}
+function fallbackCopy(text) {
+  try {
+    const ta = document.createElement('textarea');
+    ta.value = text;
+    ta.style.position = 'fixed';
+    ta.style.top = '-9999px';
+    ta.setAttribute('readonly', '');
+    document.body.appendChild(ta);
+    ta.select();
+    ta.setSelectionRange(0, text.length);   // iOS/Safari needs explicit range
+    const ok = document.execCommand('copy');
+    document.body.removeChild(ta);
+    return ok;
+  } catch (_) { return false; }
+}
+
 $('btn-copy-tiles').addEventListener('click', () => {
   const names = [...state.intersecting].sort();
   const formatted = names.map(formatTileName);
   const pyList = '[' + formatted.map(n => `'${n}'`).join(', ') + ']';
 
-  navigator.clipboard.writeText(pyList).then(() => {
+  copyToClipboard(pyList).then(ok => {
     const btn = $('btn-copy-tiles');
-    btn.classList.add('copied');
-    btn.innerHTML = '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><polyline points="2 8 6 12 14 4"/></svg> Copied!';
+    if (ok) {
+      btn.classList.add('copied');
+      btn.innerHTML = '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><polyline points="2 8 6 12 14 4"/></svg> Copied ' + names.length + '!';
+    } else {
+      btn.textContent = 'Copy failed';
+    }
     setTimeout(() => {
       btn.classList.remove('copied');
       btn.innerHTML = '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="5" width="8" height="9" rx="1"/><path d="M3 11V3a1 1 0 011-1h7"/></svg> Copy';
     }, 2000);
-  }).catch(() => {});
+  });
 });
 
 $('btn-export').addEventListener('click', () => {

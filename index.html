@@ -84,10 +84,17 @@
         </div>
         <div id="tile-list-wrap" hidden>
           <div class="tile-list-header-row">
-            <p class="section-hint" style="margin:0">Intersecting tiles</p>
+            <p class="section-hint" style="margin:0"><span id="tile-list-count">0</span> tiles</p>
             <div class="name-toggle-pills">
               <button class="name-pill active" id="btn-name-long" title="Long: EU500M_E006N006T6">Long</button>
               <button class="name-pill" id="btn-name-short" title="Short: E006N006T6">Short</button>
+            </div>
+          </div>
+          <div class="tile-list-header-row" style="margin-top:0">
+            <p class="section-hint" style="margin:0">Show</p>
+            <div class="name-toggle-pills">
+              <button class="name-pill active" id="btn-scope-all" title="All tiles intersecting the AOI">All</button>
+              <button class="name-pill" id="btn-scope-land" title="Only AOI tiles that touch land">On land</button>
             </div>
           </div>
           <ul id="tile-list"></ul>
@@ -194,6 +201,6 @@
   <script src="https://cdn.jsdelivr.net/npm/shpjs@4.0.4/dist/shp.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/globe.gl@2.30.0/dist/globe.gl.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/topojson-client@3.1.0/dist/topojson-client.min.js"></script>
-  <script src="js/app.js?v=48"></script>
+  <script src="js/app.js?v=49"></script>
 </body>
 </html>

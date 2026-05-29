@@ -37,7 +37,20 @@ let state = {
   bboxAnchor:  null,      // [lng, lat] first corner for bbox
   polyVerts:   [],        // accumulated polygon vertices
   longName:    true,      // tile-name format: true = EU500M_E006N006T6, false = E006N006T6
+  tileScope:   'all',     // which AOI tiles to list/copy/export: 'all' | 'land'
 };
+
+/* The AOI tile names matching the current scope ('all' or 'land'), sorted.
+ * Land filtering uses the cached land set; if it isn't ready yet, falls back
+ * to all (the count stat will fill in once computed). */
+function activeTileNames() {
+  let names = [...state.intersecting];
+  if (state.tileScope === 'land') {
+    const landSet = landSetCache[`${state.continent}_${state.tiling}`];
+    if (landSet) names = names.filter(n => landSet.has(n));
+  }
+  return names.sort();
+}
 
 /* Format a raw tile name (e.g. "EU_E006N006T6") for display.
  *  short → strip the "XX_" continent prefix  → "E006N006T6"
@@ -578,9 +591,12 @@ function computeLandTiles() {
 
 /* ─── Tile list renderer (truncated, formatted names) ─── */
 function renderTileList() {
-  const names = [...state.intersecting].sort();
-  if (names.length === 0) { tileListWrap.hidden = true; return; }
+  if (state.intersecting.size === 0) { tileListWrap.hidden = true; return; }
   tileListWrap.hidden = false;
+
+  const names = activeTileNames();
+  const countEl = $('tile-list-count');
+  if (countEl) countEl.textContent = names.length.toLocaleString();
 
   const fmt = formatTileName;
 
@@ -618,6 +634,8 @@ function updateStats(insideSet) {
     let n = 0;
     insideSet.forEach(name => { if (landSet.has(name)) n++; });
     statInsideLand.textContent = n.toLocaleString();
+    // Land set may have resolved after the first render — refresh if scoped to land
+    if (state.tileScope === 'land') renderTileList();
   }).catch(() => { statInsideLand.textContent = '?'; });
 
   renderTileList();
@@ -815,6 +833,19 @@ function setNameMode(long) {
 $('btn-name-long').addEventListener('click', () => setNameMode(true));
 $('btn-name-short').addEventListener('click', () => setNameMode(false));
 
+function setTileScope(scope) {
+  state.tileScope = scope;
+  $('btn-scope-all').classList.toggle('active', scope === 'all');
+  $('btn-scope-land').classList.toggle('active', scope === 'land');
+  if (state.intersecting.size > 0) renderTileList();
+}
+$('btn-scope-all').addEventListener('click', () => setTileScope('all'));
+$('btn-scope-land').addEventListener('click', () => {
+  // Ensure the land set is computed, then switch (list refreshes on resolve)
+  getLandSet().then(() => { if (state.tileScope === 'land') renderTileList(); });
+  setTileScope('land');
+});
+
 $('sampling-input').addEventListener('input', () => {
   if (state.intersecting.size > 0) renderTileList();
 });
@@ -846,7 +877,7 @@ function fallbackCopy(text) {
 }
 
 $('btn-copy-tiles').addEventListener('click', () => {
-  const names = [...state.intersecting].sort();
+  const names = activeTileNames();   // respects All / On-land scope
   const formatted = names.map(formatTileName);
   const pyList = '[' + formatted.map(n => `'${n}'`).join(', ') + ']';
 
@@ -868,14 +899,14 @@ $('btn-copy-tiles').addEventListener('click', () => {
 $('btn-export').addEventListener('click', () => {
   if (!state.tilesData || state.intersecting.size === 0) return;
 
-  const features = state.tilesData.features.filter(
-    f => state.intersecting.has(f.properties.name)
-  );
+  const nameSet = new Set(activeTileNames());   // respects All / On-land scope
+  const features = state.tilesData.features.filter(f => nameSet.has(f.properties.name));
   const fc = { type: 'FeatureCollection', features };
   const blob = new Blob([JSON.stringify(fc, null, 2)], { type: 'application/json' });
   const a = document.createElement('a');
   a.href = URL.createObjectURL(blob);
-  a.download = `equi7_${state.continent}_${state.tiling}_tiles.geojson`;
+  const scope = state.tileScope === 'land' ? 'land' : 'aoi';
+  a.download = `equi7_${state.continent}_${state.tiling}_${scope}_tiles.geojson`;
   a.click();
   URL.revokeObjectURL(a.href);
 });

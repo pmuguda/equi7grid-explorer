@@ -3,20 +3,14 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <!-- Content-Security-Policy: restrict where code/data/styles may come from.
-       Defense-in-depth against XSS and CDN supply-chain injection. -->
-  <meta http-equiv="Content-Security-Policy" content="
-    default-src 'self';
-    script-src 'self' https://cdn.jsdelivr.net;
-    style-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net https://*.cartocdn.com;
-    img-src 'self' data: blob: https://*.cartocdn.com https://cdn.jsdelivr.net;
-    connect-src 'self' https://*.cartocdn.com https://cdn.jsdelivr.net;
-    worker-src 'self' blob:;
-    font-src 'self' data:;
-    object-src 'none';
-    base-uri 'self';
-    frame-ancestors 'self';
-  ">
+  <!-- Note: a strict <meta> CSP was evaluated but removed — Turf.js requires
+       eval/Function (needs 'unsafe-eval') and the CARTO basemap pulls glyphs,
+       sprites and tiles from several *.cartocdn.com hosts, so a meaningful CSP
+       here would have to allow 'unsafe-eval' + 'unsafe-inline' + broad hosts,
+       giving little real protection while risking breakage. Supply-chain
+       integrity is instead enforced via Subresource Integrity (SRI) hashes on
+       every CDN asset below. If deployed behind a server that can set headers,
+       a tuned CSP (ideally report-only first) is the better place for it. -->
   <title>Equi7Grid Explorer</title>
   <link rel="stylesheet"
         href="https://cdn.jsdelivr.net/npm/maplibre-gl@5.24.0/dist/maplibre-gl.css"

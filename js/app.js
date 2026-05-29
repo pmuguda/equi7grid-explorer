@@ -707,6 +707,7 @@ let viewIs3D    = false;
 let savedCamera = null;
 let globeInstance = null;
 let zonesGeoJSON  = null;   // set when zones GeoJSON is fetched
+let countryFeatures = null; // Natural Earth country borders for globe
 let inactivityTimer = null;
 const INACTIVITY_MS = 30000;
 
@@ -740,14 +741,18 @@ function prepareGlobeZones(features) {
   return result;
 }
 
-/* Push current zones + tiles (with statuses) into the globe */
+/* Push current countries + zones + tiles into the globe */
 function refreshGlobeData() {
   if (!globeInstance) return;
+  const countryFeats = (countryFeatures || []).map(f => ({
+    ...f, properties: { ...f.properties, _type: 'country' },
+  }));
   const zoneFeats = zonesGeoJSON ? prepareGlobeZones(zonesGeoJSON.features) : [];
   const tileFeats = state.tilesData
     ? state.tilesData.features.map(f => ({ ...f, properties: { ...f.properties, _type: 'tile' } }))
     : [];
-  globeInstance.polygonsData([...zoneFeats, ...tileFeats]);
+  // order: countries at bottom, zones above, tiles on top
+  globeInstance.polygonsData([...countryFeats, ...zoneFeats, ...tileFeats]);
 }
 
 /* Inactivity-based auto-rotation */
@@ -761,6 +766,19 @@ function onGlobeInteraction() {
   }
 }
 
+async function loadCountryBorders() {
+  try {
+    const res = await fetch('https://cdn.jsdelivr.net/npm/world-atlas@2.0.2/countries-110m.json');
+    const topo = await res.json();
+    // topojson-client converts to GeoJSON
+    countryFeatures = topojson.feature(topo, topo.objects.countries).features;
+  } catch (e) {
+    console.warn('Country borders failed to load:', e);
+    countryFeatures = [];
+  }
+  refreshGlobeData();
+}
+
 function initGlobe() {
   const container = $('globe-wrap');
 
@@ -769,52 +787,60 @@ function initGlobe() {
     .height(container.offsetHeight)
     .backgroundColor('#080c14')
     .showAtmosphere(true)
-    .atmosphereColor('#2a50d0')
-    .atmosphereAltitude(0.22)
-    .globeImageUrl('https://unpkg.com/three-globe/example/img/earth-dark.jpg')
-    /* ── polygon styling (zones + tiles) ── */
+    .atmosphereColor('#2255cc')
+    .atmosphereAltitude(0.20)
+    /* reliable jsdelivr-hosted night-lights texture */
+    .globeImageUrl('https://cdn.jsdelivr.net/npm/three-globe/example/img/earth-dark.jpg')
+    /* ── polygon styling: countries / zones / tiles ── */
     .polygonCapColor(f => {
+      if (f.properties._type === 'country') return 'rgba(0,0,0,0)';
       if (f.properties._type === 'tile') {
         return f.properties.status === 'inside'
-          ? hexToRgba(f.properties.color, 0.75)
-          : hexToRgba(f.properties.color, 0.10);
+          ? hexToRgba(f.properties.color, 0.72)
+          : hexToRgba(f.properties.color, 0.08);
       }
-      return hexToRgba(f.properties.color, 0.38); // zones – see-through
+      return hexToRgba(f.properties.color, 0.20); // zones – very see-through
     })
     .polygonSideColor(() => 'rgba(0,0,0,0)')
     .polygonStrokeColor(f => {
+      if (f.properties._type === 'country') return 'rgba(255,255,255,0.22)';
       if (f.properties._type === 'tile') {
         return f.properties.status === 'inside'
-          ? hexToRgba(f.properties.color, 0.9)
-          : 'rgba(85,85,102,0.25)';
+          ? hexToRgba(f.properties.color, 0.95)
+          : 'rgba(100,100,120,0.18)';
       }
-      return 'rgba(255,255,255,0.45)';
+      return 'rgba(255,255,255,0.55)'; // zone borders
     })
-    .polygonAltitude(f => f.properties._type === 'tile' ? 0.012 : 0.006)
+    .polygonAltitude(f => {
+      if (f.properties._type === 'country') return 0.001;
+      if (f.properties._type === 'tile')    return 0.013;
+      return 0.005; // zones
+    })
     .polygonLabel(f => {
-      if (f.properties._type === 'tile') return null;
+      if (f.properties._type !== 'zone') return null;
       const name = CONTINENT_NAMES[f.properties.id] || f.properties.id;
       return `<div style="font:600 13px system-ui;color:${f.properties.color};`
-           + `background:rgba(0,0,0,.75);padding:4px 10px;border-radius:6px;">`
+           + `background:rgba(0,0,0,.8);padding:4px 10px;border-radius:6px;">`
            + `${name}</div>`;
     })
     /* ── click zone to select continent ── */
     .onPolygonClick(f => {
-      if (f.properties._type === 'tile') return;
+      if (f.properties._type !== 'zone') return;
       const id = f.properties.id;
       if (id) selectContinent(id);
     });
 
   /* auto-rotate off by default; starts after inactivity */
   globeInstance.controls().autoRotate      = false;
-  globeInstance.controls().autoRotateSpeed = 0.4;
+  globeInstance.controls().autoRotateSpeed = 0.35;
 
-  /* stop rotation on any user touch/drag */
+  /* stop rotation on any user touch / scroll */
   const wrap = $('globe-wrap');
   wrap.addEventListener('pointerdown', onGlobeInteraction);
   wrap.addEventListener('wheel',       onGlobeInteraction, { passive: true });
 
-  refreshGlobeData();
+  refreshGlobeData();           // initial render (no countries yet)
+  loadCountryBorders();         // async — calls refreshGlobeData when done
   startInactivityCountdown();
 }
 

@@ -1456,6 +1456,9 @@ $('btn-2d').addEventListener('click', () => {
   $('btn-2d').classList.add('active');
   $('btn-3d').classList.remove('active');
 
+  // Re-enable AOI tools — drawing/upload only works on the 2D map
+  $('aoi-toolbar').style.display = '';
+
   // Pause the render loop instead of destroying — re-activating 3D is then instant
   if (globeInstance) {
     try { globeInstance.pauseAnimation(); } catch (_) {}
@@ -1476,6 +1479,11 @@ $('btn-3d').addEventListener('click', () => {
   viewIs3D = true;
   $('btn-3d').classList.add('active');
   $('btn-2d').classList.remove('active');
+
+  // AOI tools are 2D-only — cancel any active draw and hide the toolbar.
+  // (An already-drawn AOI still displays on the globe.)
+  disableDrawMode();
+  $('aoi-toolbar').style.display = 'none';
 
   savedCamera = { center: map.getCenter(), zoom: map.getZoom() };
 

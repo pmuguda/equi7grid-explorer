@@ -933,7 +933,7 @@ async function loadCountryBorders() {
     countryPaths = featuresToPaths(
       fc.features,
       () => ({ kind: 'country', color: 'rgba(255,255,255,0.92)' }),
-      0.005
+      0.01   // above the zone fill (0.004) so borders stay crisp over the colors
     );
     refreshGlobeData();
   } catch (e) {
@@ -993,9 +993,9 @@ const MAX_LABELS  = 160;     // each label is a 3D-text mesh + draw call; keep m
 // tile ratio (6:3:1) so each name fits neatly inside its own tile, mirroring
 // the 2D map where labels stay contained within tile bounds.
 const LABEL_CFG = {
-  T6: { maxAlt: 3.0,  size: 0.11 },
-  T3: { maxAlt: 1.1,  size: 0.055 },
-  T1: { maxAlt: 0.40, size: 0.018 },
+  T6: { maxAlt: 3.0,  size: 0.20 },
+  T3: { maxAlt: 1.1,  size: 0.10 },
+  T1: { maxAlt: 0.40, size: 0.033 },
 };
 
 /* great-circle angular distance between two lat/lng points, in degrees */
@@ -1086,7 +1086,15 @@ function initGlobe() {
                 f.properties.id === state.continent ? 0.60 : 0.45))
     .polygonSideColor(() => 'rgba(0,0,0,0)')
     .polygonStrokeColor(() => 'rgba(0,0,0,0)')
-    .polygonAltitude(0.006)
+    // Fill sits just above the globe surface — high enough to avoid z-fighting
+    // with the sphere, but below the country borders (raised to 0.01 in
+    // loadCountryBorders) so those white lines render crisply on top of it.
+    .polygonAltitude(0.004)
+    // Zones are huge spherical-Voronoi polygons; the default 5° cap tessellation
+    // leaves flat triangles that dip below the sphere at grazing angles (black
+    // slivers). 1° makes each cap follow the curvature — clean fills at any
+    // angle. Only 7 polygons, so the extra geometry is negligible.
+    .polygonCapCurvatureResolution(1)
     .polygonsTransitionDuration(0)
     .polygonLabel(f => {
       const name = CONTINENT_NAMES[f.properties.id] || f.properties.id;

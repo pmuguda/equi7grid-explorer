@@ -793,10 +793,19 @@ clearAoiBtn.addEventListener('click', () => {
 });
 
 /* ─────────── File upload ─────────── */
+// Reject oversized uploads up-front so a huge/malformed file can't freeze the
+// tab while turf/shpjs churn through it (client-side resource-exhaustion guard).
+const MAX_GEOJSON_BYTES = 25 * 1024 * 1024;  // 25 MB
+const MAX_SHP_BYTES      = 50 * 1024 * 1024;  // 50 MB (zip)
+
 $('upload-geojson').addEventListener('change', async e => {
   const file = e.target.files[0];
   if (!file) return;
   e.target.value = '';
+  if (file.size > MAX_GEOJSON_BYTES) {
+    alert(`GeoJSON too large (${(file.size / 1048576).toFixed(1)} MB). Limit is 25 MB.`);
+    return;
+  }
   try {
     const text = await file.text();
     const geojson = JSON.parse(text);
@@ -810,6 +819,10 @@ $('upload-shp').addEventListener('change', async e => {
   const file = e.target.files[0];
   if (!file) return;
   e.target.value = '';
+  if (file.size > MAX_SHP_BYTES) {
+    alert(`Shapefile too large (${(file.size / 1048576).toFixed(1)} MB). Limit is 50 MB.`);
+    return;
+  }
   showLoader('Parsing shapefile…');
   try {
     const buf = await file.arrayBuffer();
@@ -1398,8 +1411,11 @@ function initGlobe() {
     .polygonCapCurvatureResolution(1)
     .polygonsTransitionDuration(0)
     .polygonLabel(f => {
-      const name = CONTINENT_NAMES[f.properties.id] || f.properties.id;
-      const color = f.properties.color || '#fff';
+      // Escape interpolated values — defense-in-depth so this HTML label can
+      // never become an injection sink, even if the zone data changes.
+      const name = escapeHtml(CONTINENT_NAMES[f.properties.id] || f.properties.id || '');
+      const raw = f.properties.color || '#fff';
+      const color = /^#[0-9a-fA-F]{3,8}$/.test(raw) ? raw : '#fff';  // hex colors only
       return `<div style="font:600 13px system-ui;color:${color};`
            + `background:rgba(0,0,0,.82);padding:4px 10px;border-radius:6px;">`
            + `${name}</div>`;
@@ -1624,6 +1640,13 @@ $('sidebar-toggle').addEventListener('click', () => {
 /* ─────────── Utilities ─────────── */
 function emptyFC() {
   return { type: 'FeatureCollection', features: [] };
+}
+
+/* Escape a string for safe interpolation into HTML. */
+function escapeHtml(s) {
+  return String(s).replace(/[&<>"']/g, c => (
+    { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]
+  ));
 }
 
 /* Split zone-polygon outlines into normal-border vs antimeridian-seam line

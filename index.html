@@ -3,8 +3,25 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <!-- Content-Security-Policy: restrict where code/data/styles may come from.
+       Defense-in-depth against XSS and CDN supply-chain injection. -->
+  <meta http-equiv="Content-Security-Policy" content="
+    default-src 'self';
+    script-src 'self' https://cdn.jsdelivr.net;
+    style-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net https://*.cartocdn.com;
+    img-src 'self' data: blob: https://*.cartocdn.com https://cdn.jsdelivr.net;
+    connect-src 'self' https://*.cartocdn.com https://cdn.jsdelivr.net;
+    worker-src 'self' blob:;
+    font-src 'self' data:;
+    object-src 'none';
+    base-uri 'self';
+    frame-ancestors 'self';
+  ">
   <title>Equi7Grid Explorer</title>
-  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/maplibre-gl@5.24.0/dist/maplibre-gl.css">
+  <link rel="stylesheet"
+        href="https://cdn.jsdelivr.net/npm/maplibre-gl@5.24.0/dist/maplibre-gl.css"
+        integrity="sha384-uTttxo/aOKbdE5RlD/SPzSDoDmNvGlUYPjONi2MN/b7c9HPSvW07OIuyP7uL6jxK"
+        crossorigin="anonymous">
   <link rel="stylesheet" href="css/style.css?v=11">
 </head>
 <body>
@@ -125,7 +142,7 @@
     </section>
 
     <footer class="sidebar-footer">
-      Grid data: <a href="https://github.com/TUW-GEO/Equi7Grid" target="_blank">TUW-GEO/Equi7Grid</a>
+      Grid data: <a href="https://github.com/TUW-GEO/Equi7Grid" target="_blank" rel="noopener noreferrer">TUW-GEO/Equi7Grid</a>
     </footer>
   </aside>
 
@@ -201,11 +218,23 @@
   </div>
 
   <!-- ─────────────── SCRIPTS ─────────────── -->
-  <script src="https://cdn.jsdelivr.net/npm/maplibre-gl@5.24.0/dist/maplibre-gl.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/@turf/turf@6.5.0/turf.min.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/shpjs@4.0.4/dist/shp.min.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/globe.gl@2.30.0/dist/globe.gl.min.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/topojson-client@3.1.0/dist/topojson-client.min.js"></script>
-  <script src="js/app.js?v=50"></script>
+  <!-- CDN libs pinned with Subresource Integrity hashes: the browser refuses
+       to run a script whose content doesn't match, blocking CDN/supply-chain tampering. -->
+  <script src="https://cdn.jsdelivr.net/npm/maplibre-gl@5.24.0/dist/maplibre-gl.js"
+          integrity="sha384-5+cfbwT0iiub6VsQAdn6yz16nr6sDiQoHx6tm4O8OVYXHYOxcffFmCJBL0dgdvGp"
+          crossorigin="anonymous"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@turf/turf@6.5.0/turf.min.js"
+          integrity="sha384-82q0nm29xZzIo5BMtDYnh2/NxeO6FoaK1S/0nF84w3cEsqbBfun3JdMyDVYWfVY5"
+          crossorigin="anonymous"></script>
+  <script src="https://cdn.jsdelivr.net/npm/shpjs@4.0.4/dist/shp.min.js"
+          integrity="sha384-All+uTLkqRBeyGd6OkVGJGbq2ChIKDWUrewcZ+uQDZzF11/b9sgw5p714836LTKO"
+          crossorigin="anonymous"></script>
+  <script src="https://cdn.jsdelivr.net/npm/globe.gl@2.30.0/dist/globe.gl.min.js"
+          integrity="sha384-9QrV9vb4hlTYDljdb5r1QVdDd+x5D9w9KOv3OsSwy07Ryn0FLvWRUKK9JuTUdvUE"
+          crossorigin="anonymous"></script>
+  <script src="https://cdn.jsdelivr.net/npm/topojson-client@3.1.0/dist/topojson-client.min.js"
+          integrity="sha384-Ukv1p/xTma6P4/2bY5KzWBw+ydSpXmhCMtyciIQVDJ1RmOxtCYNMF1uXT9T63H67"
+          crossorigin="anonymous"></script>
+  <script src="js/app.js?v=51"></script>
 </body>
 </html>

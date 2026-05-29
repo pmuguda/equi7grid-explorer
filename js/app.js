@@ -739,8 +739,12 @@ function featuresToPaths(features, extraProps, alt = 0.004, step = 1) {
                 : geom.type === 'MultiPolygon' ? geom.coordinates : [];
     polys.forEach(poly => {
       const ring = poly[0];
+      // Adaptive decimation: never reduce a ring below ~8 segments, so small
+      // rings (e.g. T1 tile squares with only 5 vertices) are kept intact and
+      // don't collapse into triangles.
+      const effStep = Math.max(1, Math.min(step, Math.floor((ring.length - 1) / 8)));
       const coords = [];
-      for (let i = 0; i < ring.length; i += step) {
+      for (let i = 0; i < ring.length; i += effStep) {
         coords.push({ lat: ring[i][1], lng: ring[i][0], alt });
       }
       // always include the closing vertex so the ring stays closed

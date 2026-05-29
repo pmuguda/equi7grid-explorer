@@ -103,21 +103,9 @@ function onMapLoad() {
     data: emptyFC(),
   });
 
-  /* ── Country borders (white outlines, matches the 3D globe) ── */
-  map.addSource('countries', { type: 'geojson', data: emptyFC() });
-  map.addLayer({
-    id: 'countries-line',
-    type: 'line',
-    source: 'countries',
-    paint: {
-      'line-color': '#ffffff',
-      'line-width': 0.6,
-      'line-opacity': 0.28,
-    },
-  });
-  fetchCountries()
-    .then(fc => map.getSource('countries')?.setData(fc))
-    .catch(err => console.warn('2D country borders failed:', err));
+  // No country-border overlay in 2D — the CARTO basemap already renders
+  // subtle country borders. Adding white lines on top caused very visible
+  // "horizontal lines" across zone fills (many African borders follow parallels).
 
   /* ── Zone layers (canonical 7-zone partition) ── */
   map.addLayer({

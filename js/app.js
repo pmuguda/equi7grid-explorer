@@ -387,7 +387,7 @@ function selectContinent(id) {
     const v = CONTINENT_VIEWS[id];
     // Derive a globe altitude from the 2D zoom so framing matches (bigger
     // continents → higher altitude). Lower altitude = more zoomed in.
-    if (v) globeInstance.pointOfView({ lat: v.center[1], lng: v.center[0], altitude: 4.5 / v.zoom }, 900);
+    if (v) globeInstance.pointOfView({ lat: v.center[1], lng: v.center[0], altitude: 4.5 / v.zoom }, 500);
   } else {
     zoomToContinent(id);
   }
@@ -793,6 +793,12 @@ function buildTileMesh() {
   const positions = [];
   const colors = [];
 
+  // Inline lat/lng → sphere xyz (three-globe GLOBE_RADIUS = 100). This matches
+  // globeInstance.getCoords() exactly but avoids its per-call overhead, and we
+  // convert each shared vertex once → ~3× faster mesh build.
+  const DEG = Math.PI / 180;
+  const R = 100 * (1 + ALT);
+
   for (const f of state.tilesData.features) {
     const rgb = hexToRgb01(f.properties.color);
     const dim = f.properties.status === 'inside' ? 1.0 : 0.78;  // outside tiles dimmer
@@ -800,18 +806,22 @@ function buildTileMesh() {
 
     const ring = f.geometry.coordinates[0];
     const step = Math.max(1, Math.min(3, Math.floor((ring.length - 1) / 8)));
-    // build decimated point list (+ closing vertex)
-    const pts = [];
-    for (let i = 0; i < ring.length; i += step) pts.push(ring[i]);
+    // build decimated point list (+ closing vertex), converting each once
+    const xyz = [];
+    const pushXY = (lng, lat) => {
+      const phi = (90 - lat) * DEG, theta = (90 - lng) * DEG;
+      const sp = Math.sin(phi);
+      xyz.push([R * sp * Math.cos(theta), R * Math.cos(phi), R * sp * Math.sin(theta)]);
+    };
+    for (let i = 0; i < ring.length; i += step) pushXY(ring[i][0], ring[i][1]);
     const last = ring[ring.length - 1];
-    const tail = pts[pts.length - 1];
-    if (tail[0] !== last[0] || tail[1] !== last[1]) pts.push(last);
+    const lastIdx = ring.length - 1 - ((ring.length - 1) % step);
+    if (lastIdx !== ring.length - 1) pushXY(last[0], last[1]);
 
     // emit one line segment (vertex pair) per edge
-    for (let i = 0; i < pts.length - 1; i++) {
-      const a = globeInstance.getCoords(pts[i][1],   pts[i][0],   ALT);
-      const b = globeInstance.getCoords(pts[i+1][1], pts[i+1][0], ALT);
-      positions.push(a.x, a.y, a.z, b.x, b.y, b.z);
+    for (let i = 0; i < xyz.length - 1; i++) {
+      const a = xyz[i], b = xyz[i + 1];
+      positions.push(a[0], a[1], a[2], b[0], b[1], b[2]);
       colors.push(cr, cg, cb, cr, cg, cb);
     }
   }
@@ -1136,7 +1146,7 @@ $('btn-3d').addEventListener('click', () => {
   // If a continent was already selected, fly globe to it (centered + zoomed)
   if (state.continent) {
     const v = CONTINENT_VIEWS[state.continent];
-    if (v) globeInstance?.pointOfView({ lat: v.center[1], lng: v.center[0], altitude: 4.5 / v.zoom }, 900);
+    if (v) globeInstance?.pointOfView({ lat: v.center[1], lng: v.center[0], altitude: 4.5 / v.zoom }, 500);
   }
 });
 

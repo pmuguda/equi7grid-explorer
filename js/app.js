@@ -42,7 +42,6 @@ let state = {
 /* ── DOM refs ── */
 const $ = id => document.getElementById(id);
 const tilingSection  = $('tiling-section');
-const aoiSection     = $('aoi-section');
 const statsSection   = $('stats-section');
 const exportSection  = $('export-section');
 const hintBanner     = $('hint-banner');
@@ -360,17 +359,13 @@ function selectContinent(id) {
   map.setFeatureState({ source: 'zones', id }, { selected: true });
   map.setLayoutProperty('continent-labels', 'visibility', 'none');
 
-  // Update sidebar buttons
-  document.querySelectorAll('.cont-btn').forEach(btn => {
-    btn.classList.toggle('active', btn.dataset.id === id);
-  });
-
-  // Show tiling + AOI sections
+  // Show tiling section, reset stats
   tilingSection.hidden  = false;
-  aoiSection.hidden     = false;
+  $('no-selection-hint').hidden = true;
   statsSection.hidden   = true;
   exportSection.hidden  = true;
   clearAoiBtn.hidden    = true;
+  $('aoi-clear-divider').hidden = true;
 
   // Reset AOI source
   map.getSource('aoi').setData(emptyFC());
@@ -451,6 +446,7 @@ function applyAOI(geojson, zoomTo = true) {
   state.aoi = feat;
   map.getSource('aoi').setData(feat);
   clearAoiBtn.hidden = false;
+  $('aoi-clear-divider').hidden = false;
 
   if (zoomTo) {
     const bb = turf.bbox(feat);
@@ -638,6 +634,7 @@ clearAoiBtn.addEventListener('click', () => {
   state.aoi = null;
   state.intersecting = new Set();
   clearAoiBtn.hidden = true;
+  $('aoi-clear-divider').hidden = true;
   statsSection.hidden = true;
   exportSection.hidden = true;
   map.getSource('aoi').setData(emptyFC());
@@ -703,10 +700,6 @@ $('btn-export').addEventListener('click', () => {
   URL.revokeObjectURL(a.href);
 });
 
-/* ─────────── Continent sidebar buttons ─────────── */
-document.querySelectorAll('.cont-btn').forEach(btn => {
-  btn.addEventListener('click', () => selectContinent(btn.dataset.id));
-});
 
 /* ─────────── Sidebar collapse / expand ─────────── */
 $('sidebar-toggle').addEventListener('click', () => {
@@ -1208,6 +1201,10 @@ $('btn-2d').addEventListener('click', () => {
     try { globeInstance.pauseAnimation(); } catch (_) {}
   }
 
+  // Re-enable draw tools when returning to 2D
+  $('btn-bbox').disabled = false;
+  $('btn-poly').disabled = false;
+
   $('globe-wrap').hidden = true;
   $('map').style.visibility = '';
   map.resize();
@@ -1228,6 +1225,10 @@ $('btn-3d').addEventListener('click', () => {
 
   $('map').style.visibility = 'hidden';
   $('globe-wrap').hidden = false;
+
+  // Draw tools only work on the 2D map canvas
+  $('btn-bbox').disabled = true;
+  $('btn-poly').disabled = true;
 
   if (globeInstance) {
     // Resume existing globe — sync any changes made while in 2D, then unpause
@@ -1261,16 +1262,6 @@ $('sidebar-toggle').addEventListener('click', () => {
       globeInstance.width(c.offsetWidth).height(c.offsetHeight);
     }, 300);
   }
-});
-
-/* ─────────── Toggle continent buttons panel ─────────── */
-$('btn-toggle-continents').addEventListener('click', () => {
-  const body    = $('continent-body');
-  const btn     = $('btn-toggle-continents');
-  const hidden  = body.hidden;
-  body.hidden   = !hidden;
-  btn.setAttribute('aria-expanded', String(hidden));
-  btn.classList.toggle('collapsed', !hidden);
 });
 
 /* ─────────── Utilities ─────────── */

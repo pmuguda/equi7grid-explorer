@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Equi7Grid Explorer</title>
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/maplibre-gl@5.24.0/dist/maplibre-gl.css">
-  <link rel="stylesheet" href="css/style.css?v=8">
+  <link rel="stylesheet" href="css/style.css?v=9">
 </head>
 <body>
 
@@ -20,33 +20,14 @@
       </div>
     </header>
 
-    <!-- CONTINENT SELECTOR -->
-    <section class="panel-section">
-      <div class="section-title-row">
-        <h2 class="section-title">1 · Select Continent</h2>
-        <button class="toggle-btn" id="btn-toggle-continents" aria-expanded="true" title="Show / hide continent buttons">
-          <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
-            <path d="M3 5l5 5 5-5"/>
-          </svg>
-        </button>
-      </div>
-      <div id="continent-body">
-      <p class="section-hint">Click a colored zone on the map or a button below.</p>
-      <div class="continent-grid" id="continent-grid">
-        <button class="cont-btn" data-id="AF">Africa</button>
-        <button class="cont-btn" data-id="AN">Antarctica</button>
-        <button class="cont-btn" data-id="AS">Asia</button>
-        <button class="cont-btn" data-id="EU">Europe</button>
-        <button class="cont-btn" data-id="NA">N. America</button>
-        <button class="cont-btn" data-id="OC">Oceania</button>
-        <button class="cont-btn" data-id="SA">S. America</button>
-      </div>
-      </div><!-- /continent-body -->
-    </section>
+    <!-- No-selection hint -->
+    <div id="no-selection-hint" class="panel-section">
+      <p class="section-hint" style="margin-bottom:0">Click a colored zone on the map to select a continent.</p>
+    </div>
 
     <!-- TILING SYSTEM -->
     <section class="panel-section" id="tiling-section" hidden>
-      <h2 class="section-title">2 · Tiling System</h2>
+      <h2 class="section-title">1 · Tiling System</h2>
       <div class="tiling-group">
         <label class="tiling-opt">
           <input type="radio" name="tiling" value="T6" checked>
@@ -72,50 +53,9 @@
       </div>
     </section>
 
-    <!-- AOI TOOLS -->
-    <section class="panel-section" id="aoi-section" hidden>
-      <h2 class="section-title">3 · Area of Interest</h2>
-      <p class="section-hint">Draw or upload a region to find intersecting tiles.</p>
-      <div class="tool-row">
-        <button class="tool-btn" id="btn-bbox" title="Click twice to define a bounding box">
-          <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.8">
-            <rect x="3" y="3" width="14" height="14" rx="1"/>
-            <circle cx="3" cy="3" r="1.5" fill="currentColor"/>
-            <circle cx="17" cy="3" r="1.5" fill="currentColor"/>
-            <circle cx="3" cy="17" r="1.5" fill="currentColor"/>
-            <circle cx="17" cy="17" r="1.5" fill="currentColor"/>
-          </svg>
-          Draw Rectangle
-        </button>
-        <button class="tool-btn" id="btn-poly" title="Click to add vertices, double-click to close">
-          <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.8">
-            <polygon points="10,2 18,8 15,17 5,17 2,8"/>
-          </svg>
-          Draw Polygon
-        </button>
-      </div>
-      <div class="tool-row">
-        <label class="upload-btn" id="lbl-geojson">
-          <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.8">
-            <path d="M10 3v10M6 9l4-6 4 6"/><path d="M4 15h12v2H4z"/>
-          </svg>
-          GeoJSON
-          <input type="file" id="upload-geojson" accept=".geojson,.json" hidden>
-        </label>
-        <label class="upload-btn" id="lbl-shp">
-          <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.8">
-            <path d="M10 3v10M6 9l4-6 4 6"/><path d="M4 15h12v2H4z"/>
-          </svg>
-          Shapefile (.zip)
-          <input type="file" id="upload-shp" accept=".zip" hidden>
-        </label>
-      </div>
-      <button class="clear-btn" id="btn-clear-aoi" hidden>✕ Clear AOI</button>
-    </section>
-
     <!-- STATS -->
     <section class="panel-section" id="stats-section" hidden>
-      <h2 class="section-title">4 · Tile Results</h2>
+      <h2 class="section-title">2 · Tile Results</h2>
       <div class="stats-grid">
         <div class="stat-card inside">
           <span class="stat-num" id="stat-inside">—</span>
@@ -147,7 +87,7 @@
     </footer>
   </aside>
 
-  <!-- sidebar collapse / expand tab (positioned at right edge of sidebar) -->
+  <!-- sidebar collapse / expand tab -->
   <button id="sidebar-toggle" title="Show / hide sidebar" aria-label="Toggle sidebar">
     <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2.2"
          stroke-linecap="round" stroke-linejoin="round">
@@ -158,13 +98,50 @@
   <!-- ─────────────── MAP ─────────────── -->
   <div id="map"></div>
 
-  <!-- 3D globe overlay (shown instead of map when in 3D mode) -->
+  <!-- 3D globe overlay -->
   <div id="globe-wrap" hidden></div>
 
   <!-- 2D / 3D view toggle -->
   <div id="view-toggle-wrap">
     <button class="view-toggle-pill active" id="btn-2d" title="Flat 2D map">2D</button>
     <button class="view-toggle-pill" id="btn-3d" title="3D globe view">3D</button>
+  </div>
+
+  <!-- Floating AOI toolbar — always visible, works in 2D and 3D -->
+  <div id="aoi-toolbar">
+    <button class="aoi-btn" id="btn-bbox" title="Draw Rectangle — click twice to define bbox">
+      <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.8">
+        <rect x="3" y="3" width="14" height="14" rx="1"/>
+        <circle cx="3" cy="3" r="1.5" fill="currentColor"/>
+        <circle cx="17" cy="3" r="1.5" fill="currentColor"/>
+        <circle cx="3" cy="17" r="1.5" fill="currentColor"/>
+        <circle cx="17" cy="17" r="1.5" fill="currentColor"/>
+      </svg>
+    </button>
+    <button class="aoi-btn" id="btn-poly" title="Draw Polygon — click to add vertices, double-click to close">
+      <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.8">
+        <polygon points="10,2 18,8 15,17 5,17 2,8"/>
+      </svg>
+    </button>
+    <div class="aoi-divider"></div>
+    <label class="aoi-btn" title="Upload GeoJSON">
+      <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.8">
+        <path d="M10 3v10M6 9l4-6 4 6"/><path d="M4 15h12v2H4z"/>
+      </svg>
+      <input type="file" id="upload-geojson" accept=".geojson,.json" hidden>
+    </label>
+    <label class="aoi-btn" title="Upload Shapefile (.zip)">
+      <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.8">
+        <path d="M10 3v10M6 9l4-6 4 6"/><path d="M4 15h12v2H4z"/>
+      </svg>
+      <input type="file" id="upload-shp" accept=".zip" hidden>
+    </label>
+    <div class="aoi-divider" id="aoi-clear-divider" hidden></div>
+    <button class="aoi-btn aoi-clear-btn" id="btn-clear-aoi" hidden title="Clear AOI">
+      <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+        <line x1="5" y1="5" x2="15" y2="15"/><line x1="15" y1="5" x2="5" y2="15"/>
+      </svg>
+    </button>
   </div>
 
   <!-- hint banner shown while drawing -->
@@ -182,6 +159,6 @@
   <script src="https://cdn.jsdelivr.net/npm/shpjs@4.0.4/dist/shp.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/globe.gl@2.30.0/dist/globe.gl.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/topojson-client@3.1.0/dist/topojson-client.min.js"></script>
-  <script src="js/app.js?v=39"></script>
+  <script src="js/app.js?v=40"></script>
 </body>
 </html>

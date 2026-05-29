@@ -366,7 +366,7 @@ function selectContinent(id) {
   // Zoom to continent (map or globe)
   if (viewIs3D && globeInstance) {
     const v = CONTINENT_VIEWS[id];
-    if (v) globeInstance.pointOfView({ lat: v.center[1], lng: v.center[0], altitude: 1.6 }, 900);
+    if (v) globeInstance.pointOfView({ lat: v.center[1], lng: v.center[0], altitude: 2.2 }, 900);
     onGlobeInteraction(); // stop rotation, restart inactivity timer
   } else {
     zoomToContinent(id);
@@ -718,35 +718,46 @@ function hexToRgba(hex, alpha) {
   return `rgba(${r},${g},${b},${alpha})`;
 }
 
-/* Build zone features, adding _type + NA polar-cap patch */
-function prepareGlobeZones(features) {
-  const hasTiles = !!state.tilesData;
-  const result = features.map(f => ({
-    ...f, properties: { ...f.properties, _type: 'zone', _hasTiles: hasTiles },
-  }));
-  const na = result.find(f => f.properties.id === 'NA');
-  if (na) {
-    const capRing = [];
-    for (let lon = -180; lon <= 180; lon += 3) capRing.push([lon, 85.0]);
-    for (let lon = 180; lon >= -180; lon -= 3) capRing.push([lon, 89.9]);
-    capRing.push([-180, 85.0]);
-    result.push({
-      type: 'Feature',
-      properties: { ...na.properties },
-      geometry: { type: 'Polygon', coordinates: [capRing] },
-    });
-  }
-  return result;
+/* Convert zone GeoJSON polygons to globe.gl path format (exterior rings only) */
+function zoneFeaturesToPaths(features) {
+  const paths = [];
+  features.forEach(feat => {
+    const { id, color } = feat.properties;
+    const geom = feat.geometry;
+    if (!geom) return;
+    const polys = geom.type === 'Polygon'      ? [geom.coordinates]
+                : geom.type === 'MultiPolygon' ? geom.coordinates : [];
+    polys.forEach(poly =>
+      // only exterior ring (index 0) — skip holes
+      paths.push({ id, color, coords: poly[0].map(([lng, lat]) => ({ lat, lng })) })
+    );
+  });
+  return paths;
 }
 
-/* Rebuild polygon data: zones (world overview) + tiles (if loaded) */
+/* Build transparent zone polygon features (for Three.js click-ray detection only) */
+function prepareGlobeZones(features) {
+  return features.map(f => ({
+    ...f,
+    properties: { ...f.properties, _type: 'zone' },
+  }));
+}
+
+/*
+ * Rendering strategy:
+ *  • pathsData  → visible colored zone borders, zero triangulation artifacts
+ *  • polygonsData → completely transparent fills, exist ONLY so Three.js
+ *    raycasting can detect clicks (opacity doesn't affect ray-intersection)
+ *
+ * AEQD tile polygons are never shown on the globe — they look like exploding
+ * fins due to projection distortion. Tile stats/export still work in sidebar.
+ */
 function refreshGlobeData() {
-  if (!globeInstance) return;
-  const zoneFeats = zonesGeoJSON ? prepareGlobeZones(zonesGeoJSON.features) : [];
-  const tileFeats = state.tilesData
-    ? state.tilesData.features.map(f => ({ ...f, properties: { ...f.properties, _type: 'tile' } }))
-    : [];
-  globeInstance.polygonsData([...zoneFeats, ...tileFeats]);
+  if (!globeInstance || !zonesGeoJSON) return;
+  // Transparent polygon fills for click detection
+  globeInstance.polygonsData(prepareGlobeZones(zonesGeoJSON.features));
+  // Visible path borders (re-build to pick up any new zone data)
+  globeInstance.pathsData(zoneFeaturesToPaths(zonesGeoJSON.features));
 }
 
 /* Inactivity-based auto-rotation */
@@ -774,40 +785,37 @@ function initGlobe() {
     .atmosphereColor('#2255cc')
     .atmosphereAltitude(0.20)
     .globeImageUrl('https://cdn.jsdelivr.net/npm/three-globe/example/img/earth-dark.jpg')
-    /* ── zone polygons: dim when tiles are loaded so tiles are the focus ── */
-    .polygonCapColor(f => {
-      if (f.properties._type === 'tile') {
-        return f.properties.status === 'inside'
-          ? hexToRgba(f.properties.color, 0.70)
-          : hexToRgba(f.properties.color, 0.06);
-      }
-      // Zone: more transparent when tiles are visible
-      return hexToRgba(f.properties.color, f.properties._hasTiles ? 0.08 : 0.22);
-    })
+
+    /* ── Transparent polygon fills: invisible but clickable via ray-casting ── */
+    .polygonCapColor(() => 'rgba(0,0,0,0)')
     .polygonSideColor(() => 'rgba(0,0,0,0)')
-    .polygonStrokeColor(f => {
-      if (f.properties._type === 'tile') {
-        return f.properties.status === 'inside'
-          ? hexToRgba(f.properties.color, 0.95)
-          : 'rgba(80,80,100,0.15)';
-      }
-      return f.properties._hasTiles
-        ? 'rgba(255,255,255,0.20)'
-        : 'rgba(255,255,255,0.55)';
-    })
-    .polygonAltitude(f => f.properties._type === 'tile' ? 0.012 : 0.004)
+    .polygonStrokeColor(() => 'rgba(0,0,0,0)')
+    .polygonAltitude(0.01)
     .polygonLabel(f => {
-      if (f.properties._type !== 'zone') return null;
       const name = CONTINENT_NAMES[f.properties.id] || f.properties.id;
       return `<div style="font:600 13px system-ui;color:${f.properties.color};`
-           + `background:rgba(0,0,0,.8);padding:4px 10px;border-radius:6px;">`
+           + `background:rgba(0,0,0,.82);padding:4px 10px;border-radius:6px;">`
            + `${name}</div>`;
     })
     .onPolygonClick(f => {
-      if (f.properties._type !== 'zone') return;
       const id = f.properties.id;
       if (id) selectContinent(id);
-    });
+    })
+
+    /* ── Colored paths: visible zone borders, zero triangulation artifacts ── */
+    .pathsData([])
+    .pathPoints(d => d.coords)
+    .pathPointLat(d => d.lat)
+    .pathPointLng(d => d.lng)
+    .pathColor(d => {
+      // Highlight selected zone; dim others when a selection exists
+      if (d.id === state.continent) return d.color;
+      return hexToRgba(d.color, state.continent ? 0.35 : 0.75);
+    })
+    .pathStroke(d => d.id === state.continent ? 0.7 : 0.4)
+    .pathDashLength(1)
+    .pathDashGap(0)
+    .pathTransitionDuration(0);
 
   globeInstance.controls().autoRotate      = false;
   globeInstance.controls().autoRotateSpeed = 0.35;
@@ -863,7 +871,7 @@ $('btn-3d').addEventListener('click', () => {
   // If a continent was already selected, fly globe to it
   if (state.continent) {
     const v = CONTINENT_VIEWS[state.continent];
-    if (v) globeInstance?.pointOfView({ lat: v.center[1], lng: v.center[0], altitude: 1.6 }, 900);
+    if (v) globeInstance?.pointOfView({ lat: v.center[1], lng: v.center[0], altitude: 2.2 }, 900);
   }
 });
 

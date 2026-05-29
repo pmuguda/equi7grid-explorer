@@ -104,6 +104,11 @@ function onMapLoad() {
       })),
     },
   });
+  // Zone outlines split into normal borders (solid) and antimeridian-seam
+  // segments (dashed + mild) so the harsh vertical line at ±180° is softened
+  // without affecting any other zone boundary.
+  map.addSource('zones-border', { type: 'geojson', data: emptyFC() });
+  map.addSource('zones-seam',   { type: 'geojson', data: emptyFC() });
   map.addSource('tiles', {
     type: 'geojson',
     data: emptyFC(),
@@ -136,18 +141,27 @@ function onMapLoad() {
       ],
     },
   });
+  // Normal zone borders — solid white (seam segments excluded, drawn separately)
   map.addLayer({
     id: 'zones-line',
     type: 'line',
-    source: 'zones',
+    source: 'zones-border',
     paint: {
       'line-color': '#ffffff',
-      'line-width': [
-        'case',
-        ['boolean', ['feature-state', 'selected'], false], 2.5,
-        1.2,
-      ],
+      'line-width': 1.2,
       'line-opacity': 0.7,
+    },
+  });
+  // Antimeridian seam — mild dashed line so it doesn't read as a hard border
+  map.addLayer({
+    id: 'zones-seam-line',
+    type: 'line',
+    source: 'zones-seam',
+    paint: {
+      'line-color': '#ffffff',
+      'line-width': 1,
+      'line-opacity': 0.25,
+      'line-dasharray': [3, 3],
     },
   });
   /* Continent name labels (hardcoded points, better placement than polygon centroids) */
@@ -347,6 +361,9 @@ function onMapLoad() {
     .then(r => r.json())
     .then(data => {
       map.getSource('zones').setData(data);
+      const { border, seam } = splitZoneBorders(data);
+      map.getSource('zones-border').setData(border);
+      map.getSource('zones-seam').setData(seam);
       zonesGeoJSON = data;
       // Pre-compute globe zone data once — zones never change
       zonePaths = featuresToPaths(data.features, f => ({
@@ -1527,6 +1544,42 @@ $('sidebar-toggle').addEventListener('click', () => {
 /* ─────────── Utilities ─────────── */
 function emptyFC() {
   return { type: 'FeatureCollection', features: [] };
+}
+
+/* Split zone-polygon outlines into normal-border vs antimeridian-seam line
+ * features. A segment is "seam" when both endpoints sit on ±180° longitude.
+ * Consecutive same-type segments are merged into LineStrings. */
+function splitZoneBorders(fc) {
+  const border = [], seam = [];
+  const onSeam = c => Math.abs(Math.abs(c[0]) - 180) < 0.5;
+  fc.features.forEach(f => {
+    const g = f.geometry;
+    const polys = g.type === 'Polygon' ? [g.coordinates]
+                : g.type === 'MultiPolygon' ? g.coordinates : [];
+    polys.forEach(poly => poly.forEach(ring => {
+      if (ring.length < 2) return;
+      let run = [ring[0]];
+      let runSeam = onSeam(ring[0]) && onSeam(ring[1]);
+      for (let i = 1; i < ring.length; i++) {
+        const segSeam = onSeam(ring[i - 1]) && onSeam(ring[i]);
+        if (segSeam === runSeam) {
+          run.push(ring[i]);
+        } else {
+          (runSeam ? seam : border).push(run);
+          run = [ring[i - 1], ring[i]];
+          runSeam = segSeam;
+        }
+      }
+      (runSeam ? seam : border).push(run);
+    }));
+  });
+  const toFC = arr => ({
+    type: 'FeatureCollection',
+    features: arr.filter(r => r.length >= 2).map(r => ({
+      type: 'Feature', properties: {}, geometry: { type: 'LineString', coordinates: r },
+    })),
+  });
+  return { border: toFC(border), seam: toFC(seam) };
 }
 
 function showHint(msg) {

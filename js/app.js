@@ -807,7 +807,9 @@ function buildTileMesh() {
 
   for (const f of state.tilesData.features) {
     const rgb = hexToRgb01(f.properties.color);
-    const dim = f.properties.status === 'inside' ? 1.0 : 0.78;
+    const dim = f.properties.status === 'inside' ? 1.0
+              : f.properties.status === 'outside' ? 0.15   // nearly invisible — matches 2D
+              : 0.78;
     const cr = rgb.r * dim, cg = rgb.g * dim, cb = rgb.b * dim;
 
     const ring = f.geometry.coordinates[0];
@@ -850,7 +852,9 @@ function updateTileMeshColors() {
   for (let fi = 0; fi < state.tilesData.features.length; fi++) {
     const f = state.tilesData.features[fi];
     const rgb = hexToRgb01(f.properties.color);
-    const dim = f.properties.status === 'inside' ? 1.0 : 0.78;
+    const dim = f.properties.status === 'inside' ? 1.0
+              : f.properties.status === 'outside' ? 0.15   // nearly invisible — matches 2D
+              : 0.78;
     const cr = rgb.r * dim, cg = rgb.g * dim, cb = rgb.b * dim;
     const count = featureVertCounts[fi] || 0;
     for (let i = 0; i < count; i++, vi++) {
@@ -957,7 +961,11 @@ function refreshGlobeData() {
         color: f.properties.color, status: f.properties.status, kind: 'tile',
       }), 0.05, 3)
     : [];
-  globeInstance.pathsData([...countryPaths, ...zp, ...tilePaths]);
+  // AOI boundary — white dashed outline matching the 2D map style
+  const aoiPaths = state.aoi?.geometry
+    ? featuresToPaths([state.aoi], () => ({ kind: 'aoi', color: 'rgba(255,255,255,0.9)' }), 0.07)
+    : [];
+  globeInstance.pathsData([...countryPaths, ...zp, ...tilePaths, ...aoiPaths]);
 
   // Cache tile centroids once per tile-set; labels are filtered by zoom below.
   tileCentroids = (state.tilesData && state.continent)
@@ -1149,10 +1157,10 @@ function initGlobe() {
     .pathPointLng(d => d.lng)
     .pathColor(d => {
       if (d.kind === 'country') return d.color;
+      if (d.kind === 'aoi')     return d.color;
       if (d.kind === 'tile') {
         return d.status === 'inside' ? d.color : hexToRgba(d.color, 0.85);
       }
-      // Zone borders → white like the 2D map (line-opacity 0.7, brighter when selected)
       return d.id === state.continent ? 'rgba(255,255,255,0.9)' : 'rgba(255,255,255,0.7)';
     })
     /*
@@ -1162,13 +1170,14 @@ function initGlobe() {
      * Zone borders stay as tubes (only ~8-10 paths) so they read as bold.
      */
     .pathStroke(d => {
-      if (d.kind === 'country') return null;   // thin line — performant
-      if (d.kind === 'tile')    return null;   // thin line — performant
+      if (d.kind === 'country') return null;
+      if (d.kind === 'tile')    return null;
+      if (d.kind === 'aoi')     return null;   // thin dashed line
       return d.id === state.continent ? 1.1 : 0.65;
     })
-    .pathPointAlt(d => d.alt || 0)   // lift paths above globe texture
-    .pathDashLength(1)
-    .pathDashGap(0)
+    .pathPointAlt(d => d.alt || 0)
+    .pathDashLength(d => d.kind === 'aoi' ? 0.5 : 1)
+    .pathDashGap(d => d.kind === 'aoi' ? 0.3 : 0)
     .pathTransitionDuration(0)
 
     /* ── Tile-name labels (like the 2D map) ── */

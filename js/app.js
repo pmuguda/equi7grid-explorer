@@ -977,7 +977,8 @@ function refreshGlobeData() {
         const ring = f.geometry.coordinates[0];
         let sx = 0, sy = 0, n = 0;
         for (let i = 0; i < ring.length - 1; i++) { sx += ring[i][0]; sy += ring[i][1]; n++; }
-        return { name: f.properties.name, lat: sy / n, lng: sx / n };
+        return { name: f.properties.name, lat: sy / n, lng: sx / n,
+                 status: f.properties.status };   // carry status for label colour
       })
     : [];
   updateTileLabels();
@@ -992,10 +993,13 @@ const MAX_LABELS  = 160;     // each label is a 3D-text mesh + draw call; keep m
 // (label height in angular degrees). Sizes follow the real 600/300/100 km
 // tile ratio (6:3:1) so each name fits neatly inside its own tile, mirroring
 // the 2D map where labels stay contained within tile bounds.
+// size is in angular degrees (label height). Calibrated so labels read clearly
+// at each level's maxAlt (most zoomed-out view) and stay inside their tiles
+// when fully zoomed in — matching the proportional feel of the 2D map labels.
 const LABEL_CFG = {
   T6: { maxAlt: 3.0,  size: 0.20 },
-  T3: { maxAlt: 1.1,  size: 0.10 },
-  T1: { maxAlt: 0.40, size: 0.033 },
+  T3: { maxAlt: 1.1,  size: 0.16 },
+  T1: { maxAlt: 0.40, size: 0.055 },
 };
 
 /* great-circle angular distance between two lat/lng points, in degrees */
@@ -1145,7 +1149,8 @@ function initGlobe() {
     .labelAltitude(0.05)
     .labelSize(d => d.size)
     .labelDotRadius(0)            // no marker dot, just text
-    .labelColor(() => 'rgba(255,255,255,0.92)')
+    // Match 2D: inside=white, no-status/outside=gray (#aaaaaa)
+    .labelColor(d => d.status === 'inside' ? 'rgba(255,255,255,0.92)' : 'rgba(170,170,170,0.80)')
     .labelResolution(1)
     .labelsTransitionDuration(0)
     .onZoom(scheduleTileLabelUpdate);   // hide/show labels as camera moves

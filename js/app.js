@@ -723,8 +723,10 @@ function prepareGlobeZones(features) {
   return features.map(f => ({ ...f, properties: { ...f.properties, _type: 'zone' } }));
 }
 
-/* Convert GeoJSON polygons → globe.gl path objects (exterior ring only) */
-function featuresToPaths(features, extraProps) {
+let countryPaths = [];   // loaded once from world-atlas
+
+/* Convert GeoJSON polygons → globe.gl path objects with embedded altitude */
+function featuresToPaths(features, extraProps, alt = 0.004) {
   const paths = [];
   features.forEach(feat => {
     const geom = feat.geometry;
@@ -732,16 +734,38 @@ function featuresToPaths(features, extraProps) {
     const polys = geom.type === 'Polygon'      ? [geom.coordinates]
                 : geom.type === 'MultiPolygon' ? geom.coordinates : [];
     polys.forEach(poly =>
-      paths.push({ ...extraProps(feat), coords: poly[0].map(([lng, lat]) => ({ lat, lng })) })
+      paths.push({
+        ...extraProps(feat),
+        coords: poly[0].map(([lng, lat]) => ({ lat, lng, alt })),
+      })
     );
   });
   return paths;
 }
 
+/* Load 110m country borders once and store as paths */
+async function loadCountryBorders() {
+  try {
+    const res  = await fetch('https://cdn.jsdelivr.net/npm/world-atlas@2.0.2/countries-110m.json');
+    const topo = await res.json();
+    const countries = topojson.feature(topo, topo.objects.countries).features;
+    countryPaths = featuresToPaths(
+      countries,
+      () => ({ kind: 'country', color: 'rgba(255,255,255,0.45)' }),
+      0.001   // just above sphere surface, below zone/tile paths
+    );
+    refreshGlobeData();
+  } catch (e) {
+    console.warn('Country borders load failed:', e);
+  }
+}
+
 /*
- * Visual rendering:  pathsData (zone borders + tile grid) — zero z-fighting
+ * Visual rendering:  pathsData (country borders + zone borders + tile grid)
  * Click detection:   polygonsData with transparent fills (Three.js raycasting)
- * Tiles are never filled polygons (AEQD distortion creates severe artifacts).
+ *
+ * All paths have embedded altitude so they render ABOVE the globe texture,
+ * not inside the sphere surface (alt 0 causes z-fighting with the texture).
  */
 function refreshGlobeData() {
   if (!globeInstance || !zonesGeoJSON) return;
@@ -749,18 +773,16 @@ function refreshGlobeData() {
   // Transparent polygon fills for zone click detection
   globeInstance.polygonsData(prepareGlobeZones(zonesGeoJSON.features));
 
-  // Visible paths: zone borders always + tile grid when a continent is selected
+  // Paths layered: countries (alt 0.001) → zones (alt 0.004) → tiles (alt 0.006)
   const zonePaths = featuresToPaths(zonesGeoJSON.features, f => ({
     id: f.properties.id, color: f.properties.color, kind: 'zone',
-  }));
+  }), 0.004);
   const tilePaths = (state.tilesData && state.continent)
     ? featuresToPaths(state.tilesData.features, f => ({
-        color: f.properties.color,
-        status: f.properties.status,
-        kind: 'tile',
-      }))
+        color: f.properties.color, status: f.properties.status, kind: 'tile',
+      }), 0.006)
     : [];
-  globeInstance.pathsData([...zonePaths, ...tilePaths]);
+  globeInstance.pathsData([...countryPaths, ...zonePaths, ...tilePaths]);
 }
 
 /* Inactivity-based auto-rotation */
@@ -812,18 +834,20 @@ function initGlobe() {
     .pathPointLat(d => d.lat)
     .pathPointLng(d => d.lng)
     .pathColor(d => {
+      if (d.kind === 'country') return d.color;  // rgba white from loader
       if (d.kind === 'tile') {
-        // Full color for inside tiles, brighter than before for outside
         return d.status === 'inside' ? d.color : hexToRgba(d.color, 0.65);
       }
-      // Zone borders: selected = full color + bright, others dimmed when selection active
+      // Zone border: selected = full color, others dimmed when selection active
       if (d.id === state.continent) return d.color;
       return hexToRgba(d.color, state.continent ? 0.50 : 0.85);
     })
     .pathStroke(d => {
+      if (d.kind === 'country') return 0.25;
       if (d.kind === 'tile') return d.status === 'inside' ? 0.6 : 0.4;
       return d.id === state.continent ? 1.4 : 0.8;
     })
+    .pathPointAlt(d => d.alt || 0)   // lift paths above globe texture
     .pathDashLength(1)
     .pathDashGap(0)
     .pathTransitionDuration(0);
@@ -836,6 +860,7 @@ function initGlobe() {
   wrap.addEventListener('wheel',       onGlobeInteraction, { passive: true });
 
   refreshGlobeData();
+  loadCountryBorders();   // async — calls refreshGlobeData when done
   startInactivityCountdown();
 }
 

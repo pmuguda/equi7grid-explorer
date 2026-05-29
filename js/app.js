@@ -1555,6 +1555,55 @@ $('btn-3d').addEventListener('click', () => {
   }
 });
 
+/* ─────────── Home / reset to initial state ─────────── */
+function resetToHome() {
+  // Back to 2D (uses the existing handler: restores toolbar, etc.)
+  if (viewIs3D) $('btn-2d').click();
+
+  disableDrawMode();
+
+  // Clear AOI
+  state.aoi = null;
+  state.intersecting = new Set();
+  map.getSource('aoi').setData(emptyFC());
+  clearAoiBtn.hidden = true;
+  $('aoi-clear-divider').hidden = true;
+  aoiResults.hidden = true;
+
+  // Deselect continent
+  if (state.continent)
+    map.setFeatureState({ source: 'zones', id: state.continent }, { selected: false });
+  state.continent = null;
+  state.tilesData = null;
+  map.getSource('tiles').setData(emptyFC());
+
+  // Remove any lingering 3D tile mesh
+  if (tileMesh) {
+    try { tileMesh.parent && tileMesh.parent.remove(tileMesh); tileMesh.geometry.dispose(); tileMesh.material.dispose(); } catch (_) {}
+    tileMesh = null; tileMeshKey = '';
+  }
+
+  // Restore initial sidebar/map UI
+  tilingSection.hidden = true;
+  statsSection.hidden  = true;
+  exportSection.hidden = true;
+  $('no-selection-hint').hidden = false;
+  map.setLayoutProperty('continent-labels', 'visibility', 'visible');
+  statLand.textContent = '—';
+  statInsideLand.textContent = '—';
+
+  // Reset controls to defaults
+  const t6 = document.querySelector('input[name="tiling"][value="T6"]');
+  if (t6) t6.checked = true;
+  state.tiling = 'T6';
+  setNameMode(true);
+  setTileScope('all');
+
+  // Fly back to the opening view
+  map.flyTo({ center: [15, 20], zoom: 1.8, duration: 700 });
+}
+$('btn-home').addEventListener('click', resetToHome);
+
 /* resize globe on window resize or sidebar collapse */
 window.addEventListener('resize', () => {
   if (globeInstance && viewIs3D) {

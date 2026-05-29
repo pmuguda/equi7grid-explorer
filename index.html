@@ -143,11 +143,16 @@
   <!-- 3D globe overlay -->
   <div id="globe-wrap" hidden></div>
 
-  <!-- 2D / 3D view toggle -->
+  <!-- 2D / 3D view toggle + Home reset -->
   <div id="view-toggle-wrap">
     <button class="view-toggle-pill active" id="btn-2d" title="Flat 2D map">2D</button>
     <button class="view-toggle-pill" id="btn-3d" title="3D globe view">3D</button>
   </div>
+  <button id="btn-home" title="Reset to start (clear selection, AOI &amp; view)" aria-label="Reset to start">
+    <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M3 9.5L10 3l7 6.5"/><path d="M5 8.5V16h10V8.5"/><path d="M8.5 16v-4h3v4"/>
+    </svg>
+  </button>
 
   <!-- Floating AOI toolbar — always visible, works in 2D and 3D -->
   <div id="aoi-toolbar">
@@ -201,6 +206,6 @@
   <script src="https://cdn.jsdelivr.net/npm/shpjs@4.0.4/dist/shp.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/globe.gl@2.30.0/dist/globe.gl.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/topojson-client@3.1.0/dist/topojson-client.min.js"></script>
-  <script src="js/app.js?v=49"></script>
+  <script src="js/app.js?v=50"></script>
 </body>
 </html>

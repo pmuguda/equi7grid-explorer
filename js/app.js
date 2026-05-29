@@ -751,8 +751,8 @@ async function loadCountryBorders() {
     const countries = topojson.feature(topo, topo.objects.countries).features;
     countryPaths = featuresToPaths(
       countries,
-      () => ({ kind: 'country', color: 'rgba(255,255,255,0.45)' }),
-      0.001   // just above sphere surface, below zone/tile paths
+      () => ({ kind: 'country', color: 'rgba(255,255,255,0.70)' }),
+      0.005   // clearly above surface but below zones/tiles
     );
     refreshGlobeData();
   } catch (e) {
@@ -773,14 +773,14 @@ function refreshGlobeData() {
   // Transparent polygon fills for zone click detection
   globeInstance.polygonsData(prepareGlobeZones(zonesGeoJSON.features));
 
-  // Paths layered: countries (alt 0.001) → zones (alt 0.004) → tiles (alt 0.006)
+  // Paths layered: countries (alt 0.005) → zones (alt 0.015) → tiles (alt 0.025)
   const zonePaths = featuresToPaths(zonesGeoJSON.features, f => ({
     id: f.properties.id, color: f.properties.color, kind: 'zone',
-  }), 0.004);
+  }), 0.015);
   const tilePaths = (state.tilesData && state.continent)
     ? featuresToPaths(state.tilesData.features, f => ({
         color: f.properties.color, status: f.properties.status, kind: 'tile',
-      }), 0.006)
+      }), 0.025)
     : [];
   globeInstance.pathsData([...countryPaths, ...zonePaths, ...tilePaths]);
 }
@@ -834,18 +834,19 @@ function initGlobe() {
     .pathPointLat(d => d.lat)
     .pathPointLng(d => d.lng)
     .pathColor(d => {
-      if (d.kind === 'country') return d.color;  // rgba white from loader
+      if (d.kind === 'country') return d.color;
       if (d.kind === 'tile') {
-        return d.status === 'inside' ? d.color : hexToRgba(d.color, 0.65);
+        // More transparent for outside tiles (user request)
+        return d.status === 'inside' ? d.color : hexToRgba(d.color, 0.45);
       }
-      // Zone border: selected = full color, others dimmed when selection active
       if (d.id === state.continent) return d.color;
       return hexToRgba(d.color, state.continent ? 0.50 : 0.85);
     })
     .pathStroke(d => {
-      if (d.kind === 'country') return 0.25;
-      if (d.kind === 'tile') return d.status === 'inside' ? 0.6 : 0.4;
-      return d.id === state.continent ? 1.4 : 0.8;
+      // Thinner strokes = fewer tube triangles = better performance
+      if (d.kind === 'country') return 0.15;
+      if (d.kind === 'tile') return d.status === 'inside' ? 0.40 : 0.20;
+      return d.id === state.continent ? 1.0 : 0.6;
     })
     .pathPointAlt(d => d.alt || 0)   // lift paths above globe texture
     .pathDashLength(1)

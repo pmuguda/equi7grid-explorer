@@ -988,12 +988,14 @@ let tileCentroids = [];
 let lastLabelKey  = '';      // skip rebuilds when the visible set is unchanged
 const MAX_LABELS  = 160;     // each label is a 3D-text mesh + draw call; keep modest
 
-// Per-level: max camera altitude at which labels appear + their arc-size.
-// Smaller tiles only get labels once you've zoomed in enough for them to fit.
+// Per-level: max camera altitude at which labels appear + their arc-size
+// (label height in angular degrees). Sizes follow the real 600/300/100 km
+// tile ratio (6:3:1) so each name fits neatly inside its own tile, mirroring
+// the 2D map where labels stay contained within tile bounds.
 const LABEL_CFG = {
-  T6: { maxAlt: 3.0,  size: 0.32 },
-  T3: { maxAlt: 1.1,  size: 0.16 },
-  T1: { maxAlt: 0.40, size: 0.09 },
+  T6: { maxAlt: 3.0,  size: 0.11 },
+  T3: { maxAlt: 1.1,  size: 0.055 },
+  T1: { maxAlt: 0.40, size: 0.018 },
 };
 
 /* great-circle angular distance between two lat/lng points, in degrees */
@@ -1076,11 +1078,16 @@ function initGlobe() {
     .pathResolution(4)   // coarser interpolation → lighter geometry, faster
     .globeImageUrl('https://cdn.jsdelivr.net/npm/three-globe/example/img/earth-dark.jpg')
 
-    /* ── Transparent polygon fills — only for Three.js click raycasting ── */
-    .polygonCapColor(() => 'rgba(0,0,0,0)')
+    /* ── Translucent zone fills — colored like the 2D map (also used for
+     *    Three.js click raycasting). Selected zone fills a touch stronger,
+     *    matching the 2D fill-opacity ramp (0.45 base → 0.60 selected). ── */
+    .polygonCapColor(f =>
+      hexToRgba(f.properties.color || '#888888',
+                f.properties.id === state.continent ? 0.60 : 0.45))
     .polygonSideColor(() => 'rgba(0,0,0,0)')
     .polygonStrokeColor(() => 'rgba(0,0,0,0)')
-    .polygonAltitude(0.005)
+    .polygonAltitude(0.006)
+    .polygonsTransitionDuration(0)
     .polygonLabel(f => {
       const name = CONTINENT_NAMES[f.properties.id] || f.properties.id;
       const color = f.properties.color || '#fff';
@@ -1103,8 +1110,8 @@ function initGlobe() {
       if (d.kind === 'tile') {
         return d.status === 'inside' ? d.color : hexToRgba(d.color, 0.85);
       }
-      if (d.id === state.continent) return d.color;
-      return hexToRgba(d.color, state.continent ? 0.50 : 0.85);
+      // Zone borders → white like the 2D map (line-opacity 0.7, brighter when selected)
+      return d.id === state.continent ? 'rgba(255,255,255,0.9)' : 'rgba(255,255,255,0.7)';
     })
     /*
      * pathStroke: a numeric value renders a fat TUBE (expensive geometry);

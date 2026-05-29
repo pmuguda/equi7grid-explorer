@@ -681,7 +681,7 @@ function handleMouseMove(e) {
     const [x1, y1] = state.bboxAnchor;
     const [x2, y2] = pt;
     const bbox = [Math.min(x1, x2), Math.min(y1, y2), Math.max(x1, x2), Math.max(y1, y2)];
-    map.getSource('draw-preview').setData(turf.bboxPolygon(bbox));
+    setDrawPreview(turf.bboxPolygon(bbox));
     return;
   }
 
@@ -690,11 +690,16 @@ function handleMouseMove(e) {
   }
 }
 
+/* Push draw-preview geometry to both the 2D map source and (in 3D) the globe. */
+function setDrawPreview(data) {
+  map.getSource('draw-preview').setData(data);
+  if (viewIs3D) renderGlobePreview(data);
+}
+
 function updatePolyPreview(cursor) {
   const verts = cursor ? [...state.polyVerts, cursor] : state.polyVerts;
   if (verts.length < 2) {
-    // Just show the single vertex as a point
-    map.getSource('draw-preview').setData({
+    setDrawPreview({
       type: 'FeatureCollection',
       features: state.polyVerts.map(v => turf.point(v)),
     });
@@ -705,14 +710,13 @@ function updatePolyPreview(cursor) {
     turf.lineString([...verts, verts[0]]),
     ...state.polyVerts.map(v => turf.point(v)),
   ];
-  map.getSource('draw-preview').setData({
-    type: 'FeatureCollection',
-    features,
-  });
+  setDrawPreview({ type: 'FeatureCollection', features });
 }
 
 function clearPreview() {
   map.getSource('draw-preview').setData(emptyFC());
+  globePreviewPaths = [];
+  if (globeInstance) { globeInstance.pointsData([]); applyGlobePaths(); }
 }
 
 function disableDrawMode() {
@@ -1096,6 +1100,59 @@ async function loadCountryBorders() {
  * If three.js can't be harvested (unexpected), tiles fall back to per-tile
  * paths so nothing breaks.
  */
+/* Densify a polygon feature's edges (insert points every ~maxStep degrees in
+ * lat/lng) so that when drawn on the globe the boundary follows the curvature
+ * instead of cutting straight chords below the surface. */
+function densifyFeature(feat, maxStep = 1.5) {
+  const densifyRing = ring => {
+    const out = [];
+    for (let i = 0; i < ring.length - 1; i++) {
+      const [x1, y1] = ring[i], [x2, y2] = ring[i + 1];
+      const segs = Math.max(1, Math.ceil(Math.max(Math.abs(x2 - x1), Math.abs(y2 - y1)) / maxStep));
+      for (let j = 0; j < segs; j++) out.push([x1 + (x2 - x1) * j / segs, y1 + (y2 - y1) * j / segs]);
+    }
+    out.push(ring[ring.length - 1]);
+    return out;
+  };
+  const g = feat.geometry;
+  const map1 = poly => poly.map(densifyRing);
+  const coords = g.type === 'Polygon'      ? map1(g.coordinates)
+               : g.type === 'MultiPolygon' ? g.coordinates.map(map1)
+               : g.coordinates;
+  return { type: 'Feature', properties: feat.properties || {},
+           geometry: { type: g.type, coordinates: coords } };
+}
+
+/* Combine cached base paths with any live draw-preview paths and push to the
+ * globe in a single call (avoids a full refreshGlobeData on every mousemove). */
+let globeBasePaths    = [];
+let globePreviewPaths = [];
+function applyGlobePaths() {
+  if (globeInstance) globeInstance.pathsData([...globeBasePaths, ...globePreviewPaths]);
+}
+
+/* Render the in-progress draw preview on the globe from the same GeoJSON the
+ * 2D map uses — blue dashed outline + blue vertex dots (mirrors the 2D style). */
+function renderGlobePreview(data) {
+  if (!globeInstance) return;
+  const feats = !data ? []
+              : data.type === 'FeatureCollection' ? data.features
+              : [data];
+  const lineFeats = [], ptCoords = [];
+  for (const f of feats) {
+    const t = f.geometry?.type;
+    if (t === 'Polygon' || t === 'MultiPolygon') lineFeats.push(densifyFeature(f));
+    else if (t === 'LineString') {
+      lineFeats.push(densifyFeature({ type: 'Feature', geometry: { type: 'Polygon', coordinates: [f.geometry.coordinates] } }));
+    } else if (t === 'Point') ptCoords.push({ lat: f.geometry.coordinates[1], lng: f.geometry.coordinates[0] });
+  }
+  globePreviewPaths = lineFeats.length
+    ? featuresToPaths(lineFeats, () => ({ kind: 'preview' }), 0.092)
+    : [];
+  globeInstance.pointsData(ptCoords);
+  applyGlobePaths();
+}
+
 function refreshGlobeData() {
   if (!globeInstance || !zonesGeoJSON || !viewIs3D) return;
 
@@ -1113,11 +1170,13 @@ function refreshGlobeData() {
         color: f.properties.color, status: f.properties.status, kind: 'tile',
       }), 0.05, 3)
     : [];
-  // AOI boundary — white dashed outline matching the 2D map style
+  // AOI boundary — densified so edges hug the sphere (no submerged chords),
+  // lifted to 0.09 (above tiles at 0.05) so it floats clearly on the surface.
   const aoiPaths = state.aoi?.geometry
-    ? featuresToPaths([state.aoi], () => ({ kind: 'aoi', color: 'rgba(255,255,255,0.9)' }), 0.07)
+    ? featuresToPaths([densifyFeature(state.aoi)], () => ({ kind: 'aoi' }), 0.09)
     : [];
-  globeInstance.pathsData([...countryPaths, ...zp, ...tilePaths, ...aoiPaths]);
+  globeBasePaths = [...countryPaths, ...zp, ...tilePaths, ...aoiPaths];
+  applyGlobePaths();
 
   // Cache tile centroids once per tile-set; labels are filtered by zoom below.
   tileCentroids = (state.tilesData && state.continent)
@@ -1309,7 +1368,8 @@ function initGlobe() {
     .pathPointLng(d => d.lng)
     .pathColor(d => {
       if (d.kind === 'country') return d.color;
-      if (d.kind === 'aoi')     return d.color;
+      if (d.kind === 'aoi')     return '#ffffff';      // committed AOI — bright white
+      if (d.kind === 'preview') return '#58a6ff';      // live draw preview — accent blue (matches 2D)
       if (d.kind === 'tile') {
         return d.status === 'inside' ? d.color : hexToRgba(d.color, 0.85);
       }
@@ -1324,12 +1384,13 @@ function initGlobe() {
     .pathStroke(d => {
       if (d.kind === 'country') return null;
       if (d.kind === 'tile')    return null;
-      if (d.kind === 'aoi')     return null;   // thin dashed line
+      if (d.kind === 'aoi')     return 0.4;    // bold dashed tube so it stands out from the grid
+      if (d.kind === 'preview') return 0.35;   // bold blue dashed preview
       return d.id === state.continent ? 1.1 : 0.65;
     })
     .pathPointAlt(d => d.alt || 0)
-    .pathDashLength(d => d.kind === 'aoi' ? 0.5 : 1)
-    .pathDashGap(d => d.kind === 'aoi' ? 0.3 : 0)
+    .pathDashLength(d => (d.kind === 'aoi' || d.kind === 'preview') ? 0.6 : 1)
+    .pathDashGap(d => (d.kind === 'aoi' || d.kind === 'preview') ? 0.35 : 0)
     .pathTransitionDuration(0)
 
     /* ── Tile-name labels (like the 2D map) ── */
@@ -1344,6 +1405,17 @@ function initGlobe() {
     .labelColor(d => d.status === 'inside' ? 'rgba(255,255,255,0.92)' : 'rgba(170,170,170,0.80)')
     .labelResolution(1)
     .labelsTransitionDuration(0)
+
+    /* ── Points layer — polygon-draw vertex markers (blue dots, like 2D) ── */
+    .pointsData([])
+    .pointLat(d => d.lat)
+    .pointLng(d => d.lng)
+    .pointColor(() => '#58a6ff')
+    .pointAltitude(0.09)
+    .pointRadius(0.25)
+    .pointResolution(8)
+    .pointsTransitionDuration(0)
+
     .onZoom(scheduleTileLabelUpdate);   // hide/show labels as camera moves
 
   // Manual rotation only — no auto-rotation (it caused continuous re-renders).

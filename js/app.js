@@ -706,8 +706,7 @@ $('sidebar-toggle').addEventListener('click', () => {
 let viewIs3D    = false;
 let savedCamera = null;
 let globeInstance = null;
-let zonesGeoJSON  = null;   // set when zones GeoJSON is fetched
-let countryFeatures = null; // Natural Earth country borders for globe
+let zonesGeoJSON  = null;
 let inactivityTimer = null;
 const INACTIVITY_MS = 30000;
 
@@ -719,13 +718,12 @@ function hexToRgba(hex, alpha) {
   return `rgba(${r},${g},${b},${alpha})`;
 }
 
-/* Build zone features for globe, adding _type tag and NA polar-cap fix */
+/* Build zone features, adding _type + NA polar-cap patch */
 function prepareGlobeZones(features) {
+  const hasTiles = !!state.tilesData;
   const result = features.map(f => ({
-    ...f, properties: { ...f.properties, _type: 'zone' },
+    ...f, properties: { ...f.properties, _type: 'zone', _hasTiles: hasTiles },
   }));
-
-  // NA is clipped at lat=85 for Mercator; add a polar cap to fill the gap to the pole
   const na = result.find(f => f.properties.id === 'NA');
   if (na) {
     const capRing = [];
@@ -741,42 +739,28 @@ function prepareGlobeZones(features) {
   return result;
 }
 
-/* Push current countries + zones + tiles into the globe */
+/* Rebuild polygon data: zones (world overview) + tiles (if loaded) */
 function refreshGlobeData() {
   if (!globeInstance) return;
-  const countryFeats = (countryFeatures || []).map(f => ({
-    ...f, properties: { ...f.properties, _type: 'country' },
-  }));
   const zoneFeats = zonesGeoJSON ? prepareGlobeZones(zonesGeoJSON.features) : [];
   const tileFeats = state.tilesData
     ? state.tilesData.features.map(f => ({ ...f, properties: { ...f.properties, _type: 'tile' } }))
     : [];
-  // order: countries at bottom, zones above, tiles on top
-  globeInstance.polygonsData([...countryFeats, ...zoneFeats, ...tileFeats]);
+  globeInstance.polygonsData([...zoneFeats, ...tileFeats]);
 }
 
 /* Inactivity-based auto-rotation */
 function onGlobeInteraction() {
   if (globeInstance) globeInstance.controls().autoRotate = false;
   clearTimeout(inactivityTimer);
-  if (viewIs3D) {
-    inactivityTimer = setTimeout(() => {
-      if (globeInstance && viewIs3D) globeInstance.controls().autoRotate = true;
-    }, INACTIVITY_MS);
-  }
+  if (viewIs3D) startInactivityCountdown();
 }
 
-async function loadCountryBorders() {
-  try {
-    const res = await fetch('https://cdn.jsdelivr.net/npm/world-atlas@2.0.2/countries-110m.json');
-    const topo = await res.json();
-    // topojson-client converts to GeoJSON
-    countryFeatures = topojson.feature(topo, topo.objects.countries).features;
-  } catch (e) {
-    console.warn('Country borders failed to load:', e);
-    countryFeatures = [];
-  }
-  refreshGlobeData();
+function startInactivityCountdown() {
+  clearTimeout(inactivityTimer);
+  inactivityTimer = setTimeout(() => {
+    if (globeInstance && viewIs3D) globeInstance.controls().autoRotate = true;
+  }, INACTIVITY_MS);
 }
 
 function initGlobe() {
@@ -789,33 +773,29 @@ function initGlobe() {
     .showAtmosphere(true)
     .atmosphereColor('#2255cc')
     .atmosphereAltitude(0.20)
-    /* reliable jsdelivr-hosted night-lights texture */
     .globeImageUrl('https://cdn.jsdelivr.net/npm/three-globe/example/img/earth-dark.jpg')
-    /* ── polygon styling: countries / zones / tiles ── */
+    /* ── zone polygons: dim when tiles are loaded so tiles are the focus ── */
     .polygonCapColor(f => {
-      if (f.properties._type === 'country') return 'rgba(0,0,0,0)';
       if (f.properties._type === 'tile') {
         return f.properties.status === 'inside'
-          ? hexToRgba(f.properties.color, 0.72)
-          : hexToRgba(f.properties.color, 0.08);
+          ? hexToRgba(f.properties.color, 0.70)
+          : hexToRgba(f.properties.color, 0.06);
       }
-      return hexToRgba(f.properties.color, 0.20); // zones – very see-through
+      // Zone: more transparent when tiles are visible
+      return hexToRgba(f.properties.color, f.properties._hasTiles ? 0.08 : 0.22);
     })
     .polygonSideColor(() => 'rgba(0,0,0,0)')
     .polygonStrokeColor(f => {
-      if (f.properties._type === 'country') return 'rgba(255,255,255,0.22)';
       if (f.properties._type === 'tile') {
         return f.properties.status === 'inside'
           ? hexToRgba(f.properties.color, 0.95)
-          : 'rgba(100,100,120,0.18)';
+          : 'rgba(80,80,100,0.15)';
       }
-      return 'rgba(255,255,255,0.55)'; // zone borders
+      return f.properties._hasTiles
+        ? 'rgba(255,255,255,0.20)'
+        : 'rgba(255,255,255,0.55)';
     })
-    .polygonAltitude(f => {
-      if (f.properties._type === 'country') return 0.001;
-      if (f.properties._type === 'tile')    return 0.013;
-      return 0.005; // zones
-    })
+    .polygonAltitude(f => f.properties._type === 'tile' ? 0.012 : 0.004)
     .polygonLabel(f => {
       if (f.properties._type !== 'zone') return null;
       const name = CONTINENT_NAMES[f.properties.id] || f.properties.id;
@@ -823,32 +803,21 @@ function initGlobe() {
            + `background:rgba(0,0,0,.8);padding:4px 10px;border-radius:6px;">`
            + `${name}</div>`;
     })
-    /* ── click zone to select continent ── */
     .onPolygonClick(f => {
       if (f.properties._type !== 'zone') return;
       const id = f.properties.id;
       if (id) selectContinent(id);
     });
 
-  /* auto-rotate off by default; starts after inactivity */
   globeInstance.controls().autoRotate      = false;
   globeInstance.controls().autoRotateSpeed = 0.35;
 
-  /* stop rotation on any user touch / scroll */
   const wrap = $('globe-wrap');
   wrap.addEventListener('pointerdown', onGlobeInteraction);
   wrap.addEventListener('wheel',       onGlobeInteraction, { passive: true });
 
-  refreshGlobeData();           // initial render (no countries yet)
-  loadCountryBorders();         // async — calls refreshGlobeData when done
+  refreshGlobeData();
   startInactivityCountdown();
-}
-
-function startInactivityCountdown() {
-  clearTimeout(inactivityTimer);
-  inactivityTimer = setTimeout(() => {
-    if (globeInstance && viewIs3D) globeInstance.controls().autoRotate = true;
-  }, INACTIVITY_MS);
 }
 
 $('btn-2d').addEventListener('click', () => {
@@ -858,7 +827,10 @@ $('btn-2d').addEventListener('click', () => {
   $('btn-3d').classList.remove('active');
 
   clearTimeout(inactivityTimer);
-  if (globeInstance) globeInstance.controls().autoRotate = false;
+  if (globeInstance) {
+    globeInstance.controls().autoRotate = false;
+    globeInstance.pauseAnimation();   // ← stop Three.js render loop, free GPU
+  }
 
   $('globe-wrap').hidden = true;
   $('map').style.visibility = '';
@@ -883,6 +855,7 @@ $('btn-3d').addEventListener('click', () => {
   if (!globeInstance) {
     initGlobe();
   } else {
+    globeInstance.resumeAnimation();  // ← restart Three.js render loop
     refreshGlobeData();
     startInactivityCountdown();
   }

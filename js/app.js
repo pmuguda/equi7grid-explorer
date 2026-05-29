@@ -802,6 +802,27 @@ function refreshGlobeData() {
       }), 0.05, 3)   // higher alt + lighter decimation for polar fidelity
     : [];
   globeInstance.pathsData([...countryPaths, ...zonePaths, ...tilePaths]);
+
+  // Tile-name labels (mirrors the 2D map). Skip when there are too many tiles
+  // (dense T1) — labels would overlap into an unreadable mass and hurt perf.
+  globeInstance.labelsData(buildTileLabels());
+}
+
+/* Build centroid label objects for the current tile set */
+function buildTileLabels() {
+  if (!state.tilesData || !state.continent) return [];
+  const feats = state.tilesData.features;
+  if (feats.length > 600) return [];   // too dense to label legibly
+
+  // label arc-size scales with tiling level (kept small to avoid overlap)
+  const size = state.tiling === 'T6' ? 0.32 : state.tiling === 'T3' ? 0.16 : 0.09;
+
+  return feats.map(f => {
+    const ring = f.geometry.coordinates[0];
+    let sx = 0, sy = 0, n = 0;
+    for (let i = 0; i < ring.length - 1; i++) { sx += ring[i][0]; sy += ring[i][1]; n++; }
+    return { name: f.properties.name, lng: sx / n, lat: sy / n, size };
+  });
 }
 
 /* Inactivity-based auto-rotation */
@@ -872,15 +893,26 @@ function initGlobe() {
       return hexToRgba(d.color, state.continent ? 0.50 : 0.85);
     })
     .pathStroke(d => {
-      // Thinner strokes = fewer tube triangles = better performance
       if (d.kind === 'country') return 0.15;
-      if (d.kind === 'tile') return d.status === 'inside' ? 0.40 : 0.20;
-      return d.id === state.continent ? 1.0 : 0.6;
+      if (d.kind === 'tile') return d.status === 'inside' ? 0.75 : 0.5;
+      return d.id === state.continent ? 1.1 : 0.65;
     })
     .pathPointAlt(d => d.alt || 0)   // lift paths above globe texture
     .pathDashLength(1)
     .pathDashGap(0)
-    .pathTransitionDuration(0);
+    .pathTransitionDuration(0)
+
+    /* ── Tile-name labels (like the 2D map) ── */
+    .labelsData([])
+    .labelLat(d => d.lat)
+    .labelLng(d => d.lng)
+    .labelText(d => d.name)
+    .labelAltitude(0.05)
+    .labelSize(d => d.size)
+    .labelDotRadius(0)            // no marker dot, just text
+    .labelColor(() => 'rgba(255,255,255,0.92)')
+    .labelResolution(1)
+    .labelsTransitionDuration(0);
 
   globeInstance.controls().autoRotate      = false;
   globeInstance.controls().autoRotateSpeed = 0.35;

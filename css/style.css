@@ -553,7 +553,7 @@ body.sidebar-collapsed #view-toggle-wrap {
 #aoi-toolbar {
   position: fixed;
   top: 16px;
-  left: calc(var(--sidebar-w) + 110px); /* right of the 2D/3D toggle (~94px) + gap */
+  right: 16px;
   z-index: 20;
   display: flex;
   flex-direction: row;
@@ -567,7 +567,7 @@ body.sidebar-collapsed #view-toggle-wrap {
   transition: left 0.28s ease;
 }
 
-body.sidebar-collapsed #aoi-toolbar { left: calc(34px + 110px - 16px); }
+/* toolbar uses right:16px — no sidebar-collapsed adjustment needed */
 
 .aoi-btn {
   width: 34px;

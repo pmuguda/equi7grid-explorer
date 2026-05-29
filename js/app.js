@@ -21,7 +21,10 @@ const CONTINENT_COLORS = {
   EU: '#4393c3', NA: '#d9534f', OC: '#20b2aa', SA: '#9b59b6',
 };
 
-const MAP_STYLE = 'https://basemaps.cartocdn.com/gl/dark-matter-gl-style/style.json';
+// No-labels dark basemap so the 2D map matches the clean dark earth used on
+// the 3D globe (city/road/place labels removed; only our own zone & tile
+// labels and the white country borders remain — homogeneous with 3D).
+const MAP_STYLE = 'https://basemaps.cartocdn.com/gl/dark-matter-nolabels-gl-style/style.json';
 
 /* ── State ── */
 let state = {
@@ -99,6 +102,22 @@ function onMapLoad() {
     type: 'geojson',
     data: emptyFC(),
   });
+
+  /* ── Country borders (white outlines, matches the 3D globe) ── */
+  map.addSource('countries', { type: 'geojson', data: emptyFC() });
+  map.addLayer({
+    id: 'countries-line',
+    type: 'line',
+    source: 'countries',
+    paint: {
+      'line-color': '#ffffff',
+      'line-width': 0.6,
+      'line-opacity': 0.28,
+    },
+  });
+  fetchCountries()
+    .then(fc => map.getSource('countries')?.setData(fc))
+    .catch(err => console.warn('2D country borders failed:', err));
 
   /* ── Zone layers (canonical 7-zone partition) ── */
   map.addLayer({
@@ -759,15 +778,23 @@ function featuresToPaths(features, extraProps, alt = 0.004, step = 1) {
   return paths;
 }
 
-/* Load 110m country borders once; cached in countryPaths across globe rebuilds */
+/* Shared, cached fetch of 110m country borders (used by both 2D map and globe) */
+let countryGeoJSON = null;
+async function fetchCountries() {
+  if (countryGeoJSON) return countryGeoJSON;
+  const res  = await fetch('https://cdn.jsdelivr.net/npm/world-atlas@2.0.2/countries-110m.json');
+  const topo = await res.json();
+  countryGeoJSON = topojson.feature(topo, topo.objects.countries);
+  return countryGeoJSON;
+}
+
+/* Build globe country border paths once; cached across globe rebuilds */
 async function loadCountryBorders() {
   if (countryPaths.length) { refreshGlobeData(); return; }
   try {
-    const res  = await fetch('https://cdn.jsdelivr.net/npm/world-atlas@2.0.2/countries-110m.json');
-    const topo = await res.json();
-    const countries = topojson.feature(topo, topo.objects.countries).features;
+    const fc = await fetchCountries();
     countryPaths = featuresToPaths(
-      countries,
+      fc.features,
       () => ({ kind: 'country', color: 'rgba(255,255,255,0.70)' }),
       0.005
     );

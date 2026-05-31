@@ -303,7 +303,9 @@ function onMapLoad() {
     source: 'tiles',
     minzoom: 2.5,   // show tile names as soon as a zone is selected (continent zoom)
     layout: {
-      'text-field': ['get', 'name'],
+      // Drop the "XX_" zone prefix on the map for a cleaner grid
+      // (e.g. EU_E054N024T6 → E054N024T6); the sidebar list keeps full names.
+      'text-field': ['slice', ['get', 'name'], 3],
       'text-font': ['Open Sans Regular', 'Arial Unicode MS Regular'],
       'text-size': [
         'interpolate', ['linear'], ['zoom'],

@@ -1720,13 +1720,31 @@ function resetToHome() {
 $('btn-home').addEventListener('click', resetToHome);
 
 /* ─────────── Snapshot (map/globe canvas → PNG) ─────────── */
+function flashShutter() {
+  const f = $('snapshot-flash');
+  f.classList.remove('flash');
+  void f.offsetWidth;        // restart the animation
+  f.classList.add('flash');
+}
+
 function takeSnapshot() {
-  const canvas = (viewIs3D && globeInstance)
-    ? globeInstance.renderer().domElement
-    : (map && map.getCanvas());
-  if (!canvas) return;
-  const finish = () => {
+  // Temporarily hide the sidebar so the map fills the full width and the
+  // snapshot isn't clipped at the sidebar edge.
+  document.body.classList.add('capturing');
+  const restore = () => {
+    document.body.classList.remove('capturing');
+    if (viewIs3D && globeInstance) {
+      const c = $('globe-wrap');
+      globeInstance.width(c.offsetWidth).height(c.offsetHeight);
+    } else if (map) { map.resize(); }
+  };
+
+  const save = () => {
+    flashShutter();   // camera flash at the moment of capture
     try {
+      const canvas = (viewIs3D && globeInstance)
+        ? globeInstance.renderer().domElement
+        : map.getCanvas();
       const tag = state.countryName ? state.countryName.replace(/[^\w]+/g, '_')
                 : state.continent ? state.continent : 'overview';
       const a = document.createElement('a');
@@ -1734,14 +1752,20 @@ function takeSnapshot() {
       a.download = `equi7grid_${viewIs3D ? '3d' : '2d'}_${tag}_${state.tiling}.png`;
       a.click();
     } catch (e) { showHint('Snapshot failed: ' + e.message); setTimeout(hideHint, 2500); }
+    // Restore the sidebar after the flash has covered the transition
+    setTimeout(restore, 180);
   };
-  // Force a fresh frame, then capture once it has painted to the buffer
-  if (!viewIs3D && map) {
+
+  if (viewIs3D && globeInstance) {
+    const c = $('globe-wrap');
+    globeInstance.width(c.offsetWidth).height(c.offsetHeight);   // grow to full width
+    requestAnimationFrame(() => requestAnimationFrame(save));
+  } else if (map) {
+    map.resize();
     map.triggerRepaint();
-    map.once('idle', finish);
+    map.once('idle', save);
   } else {
-    // Globe renders via rAF; wait two frames so the latest paint is in the buffer
-    requestAnimationFrame(() => requestAnimationFrame(finish));
+    save();
   }
 }
 $('btn-snapshot').addEventListener('click', takeSnapshot);

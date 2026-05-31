@@ -587,6 +587,26 @@ body.mode-country .stats-grid { grid-template-columns: 1fr; }
 body.mode-country #aoi-results > .stats-grid,
 body.mode-country #aoi-results > .stats-group-label { display: none; }
 
+/* ── Snapshot: temporarily expand the map to full width for a complete capture ── */
+body.capturing #sidebar { display: none; }
+body.capturing #globe-wrap { left: 0; }
+
+/* ── Camera-shutter flash ── */
+#snapshot-flash {
+  position: fixed;
+  inset: 0;
+  z-index: 60;
+  pointer-events: none;
+  background: #ffffff;
+  opacity: 0;
+}
+#snapshot-flash.flash { animation: shutter 0.45s ease-out; }
+@keyframes shutter {
+  0%   { opacity: 0; }
+  12%  { opacity: 0.85; }
+  100% { opacity: 0; }
+}
+
 /* ── Live coordinate readout ── */
 #coord-readout {
   position: fixed;

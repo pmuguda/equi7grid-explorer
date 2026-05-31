@@ -1725,7 +1725,15 @@ function regenerateGraticule() {
   }
 
   map.getSource('graticule-lines').setData({ type: 'FeatureCollection', features: lines });
-  renderGraticuleLabelsHTML(labelData);
+
+  // When a zone is selected the Equi7 tile grid + tile names are the focus, so
+  // the lat/lng graticule steps back: hide its degree labels and fade the lines
+  // to a faint orientation guide. On the overview it returns to full strength.
+  const tilesActive = !!state.continent;
+  map.setPaintProperty('graticule-line', 'line-opacity',
+    tilesActive ? ['case', ['get', 'major'], 0.07, 0.035]
+                : ['case', ['get', 'major'], 0.16, 0.08]);
+  renderGraticuleLabelsHTML(tilesActive ? [] : labelData);
 }
 
 /* HTML overlay labels: longitudes along the bottom edge, latitudes along the

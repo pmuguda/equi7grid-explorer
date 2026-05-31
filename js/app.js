@@ -134,22 +134,23 @@ function onMapLoad() {
     type: 'geojson',
     data: emptyFC(),
   });
-  // Lat/lng graticule (gridlines) over the basemap
-  map.addSource('graticule', { type: 'geojson', data: buildGraticule(15) });
+  // Dynamic lat/lng graticule (gridlines + edge labels), kept in sync with pan/zoom
+  map.addSource('graticule-lines', { type: 'geojson', data: emptyFC() });
 
   // No country-border overlay in 2D — the CARTO basemap already renders
   // subtle country borders. Adding white lines on top caused very visible
   // "horizontal lines" across zone fills (many African borders follow parallels).
 
-  /* ── Graticule gridlines (sit on the basemap, under the zones) ── */
+  /* ── Graticule gridlines (sit on the basemap, under the zones) ──
+   * Major lines (every 5 ticks) are brighter/thicker than minor ones. */
   map.addLayer({
     id: 'graticule-line',
     type: 'line',
-    source: 'graticule',
+    source: 'graticule-lines',
     paint: {
       'line-color': '#ffffff',
-      'line-width': 0.5,
-      'line-opacity': 0.12,
+      'line-opacity': ['case', ['get', 'major'], 0.16, 0.08],
+      'line-width':   ['case', ['get', 'major'], 0.8, 0.5],
     },
   });
 
@@ -382,6 +383,10 @@ function onMapLoad() {
   document.addEventListener('keydown', e => {
     if (e.key === 'Escape') disableDrawMode();
   });
+
+  /* Initial graticule + keep it in sync with pan/zoom */
+  regenerateGraticule();
+  map.on('moveend', regenerateGraticule);
 
   /* ── Load canonical Equi7Grid zone boundaries ── */
   fetch('data/zones/e7_zones.geojson')
@@ -1656,24 +1661,107 @@ function emptyFC() {
   return { type: 'FeatureCollection', features: [] };
 }
 
-/* Build a lat/lng graticule as a LineString FeatureCollection.
- * Meridians every `step`° (full pole-to-pole), parallels every `step`°.
- * Lines are densified so they stay smooth under any map projection. */
-function buildGraticule(step = 15) {
-  const features = [];
-  // Meridians (constant longitude, vary latitude)
-  for (let lng = -180; lng <= 180; lng += step) {
-    const coords = [];
-    for (let lat = -85; lat <= 85; lat += 2) coords.push([lng, lat]);
-    features.push({ type: 'Feature', properties: {}, geometry: { type: 'LineString', coordinates: coords } });
+/* ─── Dynamic graticule (lat/lon grid + edge labels) ───────────────────────
+ * Spacing adapts to zoom (1-2-5 sequence) so ~6-10 lines span the viewport.
+ * Lines are a GL layer; degree labels are an HTML overlay pinned to the map
+ * edges (sidesteps glyph-pbf font issues with the no-labels basemap). */
+function graticuleStep(z) {
+  if (z < 1.2) return 30;
+  if (z < 2.2) return 15;
+  if (z < 3.5) return 10;
+  if (z < 4.8) return 5;
+  if (z < 6.2) return 2;
+  if (z < 7.5) return 1;
+  if (z < 9)    return 0.5;
+  if (z < 10.5) return 0.2;
+  if (z < 12)   return 0.1;
+  if (z < 13.5) return 0.05;
+  return 0.02;
+}
+
+function formatDeg(v, kind) {
+  const abs = Math.abs(v);
+  const decimals = abs < 1 ? 2 : abs < 10 ? 1 : 0;
+  const ref = kind === 'lng' ? (v >= 0 ? 'E' : 'W') : (v >= 0 ? 'N' : 'S');
+  if (v === 0) return '0°';
+  return `${abs.toFixed(decimals)}°${ref}`;
+}
+
+// Snap to nearest multiple of step (avoids float drift at fractional steps).
+const snapDeg = (v, step) => Math.round(v / step) * step;
+
+function regenerateGraticule() {
+  if (!map || !map.getSource('graticule-lines')) return;
+  const z = map.getZoom();
+  const step = graticuleStep(z);
+  const b = map.getBounds();
+  const w = b.getWest(), e = b.getEast();
+  const s = Math.max(-85, b.getSouth());
+  const n = Math.min( 85, b.getNorth());
+
+  const startLng = snapDeg(w, step) - step;
+  const endLng   = snapDeg(e, step) + step;
+  const startLat = Math.max(-85, snapDeg(s, step) - step);
+  const endLat   = Math.min( 85, snapDeg(n, step) + step);
+
+  const majorEvery = step * 5;
+  const isMajor = v => Math.abs(snapDeg(v, majorEvery) - v) < step / 100;
+
+  const lines = [], labelData = [];
+
+  for (let lng = startLng; lng <= endLng + 1e-9; lng += step) {
+    const v = +lng.toFixed(6);
+    lines.push({ type: 'Feature',
+      geometry: { type: 'LineString', coordinates: [[v, startLat], [v, endLat]] },
+      properties: { major: isMajor(v) } });
+    labelData.push({ kind: 'lng', value: v, text: formatDeg(v, 'lng') });
   }
-  // Parallels (constant latitude, vary longitude)
-  for (let lat = -75; lat <= 75; lat += step) {
-    const coords = [];
-    for (let lng = -180; lng <= 180; lng += 2) coords.push([lng, lat]);
-    features.push({ type: 'Feature', properties: {}, geometry: { type: 'LineString', coordinates: coords } });
+  for (let lat = startLat; lat <= endLat + 1e-9; lat += step) {
+    const v = +lat.toFixed(6);
+    lines.push({ type: 'Feature',
+      geometry: { type: 'LineString', coordinates: [[startLng, v], [endLng, v]] },
+      properties: { major: isMajor(v) } });
+    labelData.push({ kind: 'lat', value: v, text: formatDeg(v, 'lat') });
   }
-  return { type: 'FeatureCollection', features };
+
+  map.getSource('graticule-lines').setData({ type: 'FeatureCollection', features: lines });
+  renderGraticuleLabelsHTML(labelData);
+}
+
+/* HTML overlay labels: longitudes along the bottom edge, latitudes along the
+ * left edge — pinned to the viewport so they stay readable while panning. */
+function renderGraticuleLabelsHTML(labelData) {
+  let host = document.getElementById('graticule-labels-html');
+  if (!host) {
+    host = document.createElement('div');
+    host.id = 'graticule-labels-html';
+    document.getElementById('map').appendChild(host);
+  }
+  host.innerHTML = '';
+  const mapEl = document.getElementById('map');
+  const h = mapEl.clientHeight, w = mapEl.clientWidth;
+  const PAD_BOTTOM = 34;  // clear scale bar + attribution
+  const PAD_LEFT   = 6;
+
+  labelData.forEach(lab => {
+    const el = document.createElement('div');
+    el.className = 'graticule-label';
+    el.textContent = lab.text;
+    if (lab.kind === 'lng') {
+      const p = map.project([lab.value, 0]);
+      if (p.x < 0 || p.x > w) return;
+      el.style.left = p.x + 'px';
+      el.style.bottom = PAD_BOTTOM + 'px';
+      el.style.transform = 'translateX(-50%)';
+    } else {
+      const p = map.project([0, lab.value]);
+      if (p.y < 0 || p.y > h) return;
+      el.style.top = p.y + 'px';
+      el.style.left = PAD_LEFT + 'px';
+      el.style.transform = 'translateY(-50%)';
+    }
+    host.appendChild(el);
+  });
 }
 
 /* Escape a string for safe interpolation into HTML. */

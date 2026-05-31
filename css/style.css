@@ -516,6 +516,26 @@ body { display: flex; background: var(--bg); color: var(--text); font-size: 14px
 }
 .footer-credit { display: block; }
 
+/* ── Graticule HTML labels ── */
+#graticule-labels-html {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: 5;
+  overflow: hidden;
+}
+.graticule-label {
+  position: absolute;
+  font: 10.5px 'SF Mono', 'Fira Code', monospace;
+  color: var(--text);
+  letter-spacing: 0.02em;
+  padding: 1px 4px;
+  background: rgba(13, 17, 23, 0.6);
+  border-radius: 3px;
+  white-space: nowrap;
+  user-select: none;
+}
+
 /* ── Hint banner ── */
 #hint-banner {
   position: fixed;

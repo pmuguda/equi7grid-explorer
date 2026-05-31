@@ -658,7 +658,9 @@ function getLandSet() {
   const tilesSnap = state.tilesData;
   const p = fetchCountries().then(fc => new Promise(resolve => {
     if (!countryBBoxCache) countryBBoxCache = fc.features.map(f => turf.bbox(f));
-    setTimeout(() => {
+    // Wait for a paint frame before the heavy intersection loop, so the loader
+    // hide + tile render show immediately instead of being blocked by it.
+    requestAnimationFrame(() => setTimeout(() => {
       const set = new Set();
       for (const tile of tilesSnap.features) {
         const tb = turf.bbox(tile);
@@ -672,7 +674,7 @@ function getLandSet() {
       landSetCache[key] = set;
       delete landSetPromise[key];
       resolve(set);
-    }, 0);
+    }, 0));
   }));
   landSetPromise[key] = p;
   return p;

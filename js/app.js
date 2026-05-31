@@ -511,9 +511,11 @@ function zoomToContinent(id) {
 }
 
 /* ─────────── Tiling radio ─────────── */
-document.querySelectorAll('input[name="tiling"]').forEach(input => {
-  input.addEventListener('change', () => {
-    state.tiling = input.value;
+document.querySelectorAll('#tiling-toggle .seg-btn').forEach(btn => {
+  btn.addEventListener('click', () => {
+    document.querySelectorAll('#tiling-toggle .seg-btn')
+      .forEach(b => b.classList.toggle('active', b === btn));
+    state.tiling = btn.dataset.tiling;
     // Country mode: re-pick the selected country at the new tiling
     if (state.countryMode) {
       if (selectedCountryId != null) {
@@ -528,7 +530,11 @@ document.querySelectorAll('input[name="tiling"]').forEach(input => {
 });
 
 function currentTiling() {
-  return document.querySelector('input[name="tiling"]:checked')?.value || 'T6';
+  return document.querySelector('#tiling-toggle .seg-btn.active')?.dataset.tiling || 'T6';
+}
+function setTilingActive(t) {
+  document.querySelectorAll('#tiling-toggle .seg-btn')
+    .forEach(b => b.classList.toggle('active', b.dataset.tiling === t));
 }
 
 /* Per-tiling zoom at which 2D tile-name labels switch on. Smaller tiles need
@@ -1708,8 +1714,7 @@ function resetToHome() {
   statInsideLand.textContent = '—';
 
   // Reset controls to defaults
-  const t6 = document.querySelector('input[name="tiling"][value="T6"]');
-  if (t6) t6.checked = true;
+  setTilingActive('T6');
   state.tiling = 'T6';
   setNameMode(true);
   setTileScope('all');
@@ -1946,7 +1951,6 @@ function setCountryMode(on) {
   const btn = $('btn-country-mode');
   btn.classList.toggle('active', on);
   btn.setAttribute('aria-pressed', String(on));
-  $('country-hint').hidden = !on;
   document.body.classList.toggle('mode-country', on);
 
   if (on) {
@@ -1966,8 +1970,10 @@ function setCountryMode(on) {
     setCountriesPickVisible(true);
     loadCountriesForPick();
     regenerateGraticule();
+    showHint('Hover a country · click to show its Equi7 tiles');
   } else {
     setCountriesPickVisible(false);
+    hideHint();
     $('country-tooltip').hidden = true;
     $('aoi-toolbar').style.display = '';
     if (hoveredCountryId != null) { map.setFeatureState({ source: 'cpick', id: hoveredCountryId }, { hovered: false }); hoveredCountryId = null; }

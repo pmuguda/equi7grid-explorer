@@ -16,7 +16,7 @@
         href="https://cdn.jsdelivr.net/npm/maplibre-gl@5.24.0/dist/maplibre-gl.css"
         integrity="sha384-uTttxo/aOKbdE5RlD/SPzSDoDmNvGlUYPjONi2MN/b7c9HPSvW07OIuyP7uL6jxK"
         crossorigin="anonymous">
-  <link rel="stylesheet" href="css/style.css?v=20">
+  <link rel="stylesheet" href="css/style.css?v=21">
 </head>
 <body>
 
@@ -36,42 +36,14 @@
       <p class="section-hint" style="margin-bottom:0">Click a colored zone on the map to select a continent.</p>
     </div>
 
-    <!-- COUNTRY MODE -->
-    <section class="panel-section" id="country-section">
-      <button class="mode-toggle-btn" id="btn-country-mode" aria-pressed="false">
-        <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
-          <circle cx="10" cy="10" r="7.5"/><path d="M2.5 10h15M10 2.5c2.4 2 2.4 13 0 15M10 2.5c-2.4 2-2.4 13 0 15"/>
-        </svg>
-        Country mode
-      </button>
-      <p class="section-hint" id="country-hint" hidden style="margin:8px 0 0">Hover a country · click to show its Equi7 tiles.</p>
-    </section>
 
     <!-- TILING SYSTEM -->
     <section class="panel-section" id="tiling-section" hidden>
       <h2 class="section-title">1 · Tiling System</h2>
-      <div class="tiling-group">
-        <label class="tiling-opt">
-          <input type="radio" name="tiling" value="T6" checked>
-          <span class="tiling-label">
-            <strong>T6</strong>
-            <em>600 km × 600 km</em>
-          </span>
-        </label>
-        <label class="tiling-opt">
-          <input type="radio" name="tiling" value="T3">
-          <span class="tiling-label">
-            <strong>T3</strong>
-            <em>300 km × 300 km</em>
-          </span>
-        </label>
-        <label class="tiling-opt">
-          <input type="radio" name="tiling" value="T1">
-          <span class="tiling-label">
-            <strong>T1</strong>
-            <em>100 km × 100 km</em>
-          </span>
-        </label>
+      <div class="seg-toggle" id="tiling-toggle" role="group" aria-label="Tiling system">
+        <button class="seg-btn active" data-tiling="T6"><strong>T6</strong><em>600 km</em></button>
+        <button class="seg-btn" data-tiling="T3"><strong>T3</strong><em>300 km</em></button>
+        <button class="seg-btn" data-tiling="T1"><strong>T1</strong><em>100 km</em></button>
       </div>
     </section>
 
@@ -174,22 +146,30 @@
   <!-- 3D globe overlay -->
   <div id="globe-wrap" hidden></div>
 
-  <!-- 2D / 3D view toggle + Home reset -->
-  <div id="view-toggle-wrap">
-    <button class="view-toggle-pill active" id="btn-2d" title="Flat 2D map">2D</button>
-    <button class="view-toggle-pill" id="btn-3d" title="3D globe view">3D</button>
+  <!-- Top-left control bar: view toggle · country mode · home · snapshot -->
+  <div id="topbar-left">
+    <div id="view-toggle-wrap">
+      <button class="view-toggle-pill active" id="btn-2d" title="Flat 2D map">2D</button>
+      <button class="view-toggle-pill" id="btn-3d" title="3D globe view">3D</button>
+    </div>
+    <button class="topbar-pill" id="btn-country-mode" aria-pressed="false" title="Country mode — pick a country to show its Equi7 tiles">
+      <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
+        <circle cx="10" cy="10" r="7.5"/><path d="M2.5 10h15M10 2.5c2.4 2 2.4 13 0 15M10 2.5c-2.4 2-2.4 13 0 15"/>
+      </svg>
+      Country
+    </button>
+    <button class="topbar-icon-btn" id="btn-home" title="Reset to start (clear selection, AOI &amp; view)" aria-label="Reset to start">
+      <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M3 9.5L10 3l7 6.5"/><path d="M5 8.5V16h10V8.5"/><path d="M8.5 16v-4h3v4"/>
+      </svg>
+    </button>
+    <button class="topbar-icon-btn" id="btn-snapshot" title="Download a PNG snapshot of the map" aria-label="Snapshot map">
+      <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M3 6.5h3l1.2-2h5.6L17 6.5h0a1 1 0 011 1v8a1 1 0 01-1 1H3a1 1 0 01-1-1v-8a1 1 0 011-1z"/>
+        <circle cx="10" cy="11" r="3"/>
+      </svg>
+    </button>
   </div>
-  <button id="btn-home" title="Reset to start (clear selection, AOI &amp; view)" aria-label="Reset to start">
-    <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
-      <path d="M3 9.5L10 3l7 6.5"/><path d="M5 8.5V16h10V8.5"/><path d="M8.5 16v-4h3v4"/>
-    </svg>
-  </button>
-  <button id="btn-snapshot" title="Download a PNG snapshot of the map" aria-label="Snapshot map">
-    <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
-      <path d="M3 6.5h3l1.2-2h5.6L17 6.5h0a1 1 0 011 1v8a1 1 0 01-1 1H3a1 1 0 01-1-1v-8a1 1 0 011-1z"/>
-      <circle cx="10" cy="11" r="3"/>
-    </svg>
-  </button>
 
   <!-- Floating AOI toolbar — always visible, works in 2D and 3D -->
   <div id="aoi-toolbar">
@@ -264,6 +244,6 @@
   <script src="https://cdn.jsdelivr.net/npm/topojson-client@3.1.0/dist/topojson-client.min.js"
           integrity="sha384-Ukv1p/xTma6P4/2bY5KzWBw+ydSpXmhCMtyciIQVDJ1RmOxtCYNMF1uXT9T63H67"
           crossorigin="anonymous"></script>
-  <script src="js/app.js?v=63"></script>
+  <script src="js/app.js?v=64"></script>
 </body>
 </html>

@@ -56,15 +56,19 @@ function activeTileNames() {
   return names.sort();
 }
 
-/* Format a raw tile name (e.g. "EU_E006N006T6") for display.
- *  short → strip the "XX_" continent prefix  → "E006N006T6"
- *  long  → "<CONT><SAMPLING>M_<grid>"        → "EU500M_E006N006T6"
+/* Format a raw tile name (e.g. "EU_E006N006T6") for display. The e7 zone is
+ * taken from the tile's OWN name prefix — so country mode (tiles from several
+ * zones, e.g. France → EU + SA) labels each tile with its correct zone.
+ *  short → strip the "XX_" zone prefix → "E006N006T6"
+ *  long  → "<ZONE><SAMPLING>M_<grid>"   → "EU500M_E006N006T6"
  */
 function formatTileName(rawName) {
-  const grid = rawName.replace(/^[A-Z]{2}_/, '');   // drop continent prefix
+  const m = rawName.match(/^([A-Z]{2})_(.+)$/);
+  const zone = m ? m[1] : (state.continent || '');
+  const grid = m ? m[2] : rawName;
   if (!state.longName) return grid;
   const sampling = Math.max(1, parseInt($('sampling-input')?.value) || 500);
-  return `${state.continent || ''}${sampling}M_${grid}`;
+  return `${zone}${sampling}M_${grid}`;
 }
 
 

@@ -506,6 +506,8 @@ body { display: flex; background: var(--bg); color: var(--text); font-size: 14px
 }
 .author-name {
   font-weight: 600;
+  text-decoration: none;
+  cursor: pointer;
   /* Name only — same blue→purple gradient as the Buy-me-a-coffee button */
   background: linear-gradient(135deg, #4393c3, #9b59b6);
   -webkit-background-clip: text;
@@ -513,6 +515,7 @@ body { display: flex; background: var(--bg); color: var(--text); font-size: 14px
   -webkit-text-fill-color: transparent;
   color: transparent;
 }
+.author-name:hover { text-decoration: underline; text-decoration-color: #4393c3; }
 .footer-credit { display: block; }
 
 /* ── Graticule HTML labels ── */

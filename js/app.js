@@ -1532,10 +1532,18 @@ function initGlobe() {
       if (c) handleDblClick({ lngLat: { lng: c.lng, lat: c.lat }, originalEvent: e });
     });
     gc.addEventListener('mousemove', e => {
-      if (!state.drawMode) return;
       const c = globeInstance.toGlobeCoords(e.offsetX, e.offsetY);
-      if (c) handleMouseMove({ lngLat: { lng: c.lng, lat: c.lat } });
+      // Live coordinate readout (shows only when the cursor is over the globe)
+      const coordEl = $('coord-readout');
+      if (c) {
+        coordEl.hidden = false;
+        coordEl.textContent = `${formatDeg(c.lat, 'lat')}, ${formatDeg(c.lng, 'lng')}`;
+      } else {
+        coordEl.hidden = true;   // cursor is off the globe (in space)
+      }
+      if (state.drawMode && c) handleMouseMove({ lngLat: { lng: c.lng, lat: c.lat } });
     });
+    gc.addEventListener('mouseleave', () => { $('coord-readout').hidden = true; });
   } catch (_) {}
 
   refreshGlobeData();

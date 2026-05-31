@@ -260,15 +260,15 @@ function onMapLoad() {
     id: 'tiles-label',
     type: 'symbol',
     source: 'tiles',
-    minzoom: 4,
+    minzoom: 2.5,   // show tile names as soon as a zone is selected (continent zoom)
     layout: {
       'text-field': ['get', 'name'],
       'text-font': ['Open Sans Regular', 'Arial Unicode MS Regular'],
       'text-size': [
         'interpolate', ['linear'], ['zoom'],
-        4, 8,
-        7, 11,
-        10, 13,
+        2.5, 9,
+        5, 11,
+        8, 13,
       ],
       'text-anchor': 'center',
       'text-max-width': 10,
@@ -285,8 +285,8 @@ function onMapLoad() {
       'text-halo-width': 1.2,
       'text-opacity': [
         'interpolate', ['linear'], ['zoom'],
-        4, 0.5,
-        6, 1.0,
+        2.5, 0.75,
+        5, 1.0,
       ],
     },
   });
@@ -387,6 +387,14 @@ function onMapLoad() {
   /* Initial graticule + keep it in sync with pan/zoom */
   regenerateGraticule();
   map.on('moveend', regenerateGraticule);
+
+  /* Live lat/lng coordinate readout (bottom-left) */
+  const coordEl = $('coord-readout');
+  map.on('mousemove', e => {
+    coordEl.hidden = false;
+    coordEl.textContent = `${formatDeg(e.lngLat.lat, 'lat')}, ${formatDeg(e.lngLat.lng, 'lng')}`;
+  });
+  map.on('mouseout', () => { coordEl.hidden = true; });
 
   /* ── Load canonical Equi7Grid zone boundaries ── */
   fetch('data/zones/e7_zones.geojson')
@@ -1567,6 +1575,7 @@ $('btn-3d').addEventListener('click', () => {
   // (An already-drawn AOI still displays on the globe.)
   disableDrawMode();
   $('aoi-toolbar').style.display = 'none';
+  $('coord-readout').hidden = true;   // 2D-only readout
 
   savedCamera = { center: map.getCenter(), zoom: map.getZoom() };
 
@@ -1692,6 +1701,16 @@ const snapDeg = (v, step) => Math.round(v / step) * step;
 
 function regenerateGraticule() {
   if (!map || !map.getSource('graticule-lines')) return;
+
+  // When a zone is selected the Equi7 tile grid is the focus — hide the
+  // lat/lng graticule entirely (it's uneven on Mercator and competes with the
+  // regular tile grid). A live coordinate readout provides lat/lng instead.
+  if (state.continent) {
+    map.getSource('graticule-lines').setData(emptyFC());
+    renderGraticuleLabelsHTML([]);
+    return;
+  }
+
   const z = map.getZoom();
   const step = graticuleStep(z);
   const b = map.getBounds();
@@ -1725,15 +1744,7 @@ function regenerateGraticule() {
   }
 
   map.getSource('graticule-lines').setData({ type: 'FeatureCollection', features: lines });
-
-  // When a zone is selected the Equi7 tile grid + tile names are the focus, so
-  // the lat/lng graticule steps back: hide its degree labels and fade the lines
-  // to a faint orientation guide. On the overview it returns to full strength.
-  const tilesActive = !!state.continent;
-  map.setPaintProperty('graticule-line', 'line-opacity',
-    tilesActive ? ['case', ['get', 'major'], 0.07, 0.035]
-                : ['case', ['get', 'major'], 0.16, 0.08]);
-  renderGraticuleLabelsHTML(tilesActive ? [] : labelData);
+  renderGraticuleLabelsHTML(labelData);
 }
 
 /* HTML overlay labels: longitudes along the bottom edge, latitudes along the

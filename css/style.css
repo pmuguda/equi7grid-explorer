@@ -536,6 +536,25 @@ body { display: flex; background: var(--bg); color: var(--text); font-size: 14px
   user-select: none;
 }
 
+/* ── Live coordinate readout ── */
+#coord-readout {
+  position: fixed;
+  bottom: 8px;
+  left: calc(var(--sidebar-w) + 12px);
+  z-index: 15;
+  font: 11px 'SF Mono', 'Fira Code', monospace;
+  color: var(--text);
+  background: rgba(13, 17, 23, 0.72);
+  border: 1px solid var(--border);
+  border-radius: 5px;
+  padding: 3px 8px;
+  letter-spacing: 0.02em;
+  pointer-events: none;
+  backdrop-filter: blur(4px);
+  transition: left 0.28s ease;
+}
+body.sidebar-collapsed #coord-readout { left: 46px; }
+
 /* ── Hint banner ── */
 #hint-banner {
   position: fixed;

@@ -526,6 +526,15 @@ function currentTiling() {
   return document.querySelector('input[name="tiling"]:checked')?.value || 'T6';
 }
 
+/* Per-tiling zoom at which 2D tile-name labels switch on. Smaller tiles need
+ * more zoom before their names fit without overlapping into a mess. */
+const TILE_LABEL_MINZOOM = { T6: 2.5, T3: 4.5, T1: 6.5 };
+function applyTileLabelZoom() {
+  if (!map.getLayer('tiles-label')) return;
+  const mz = TILE_LABEL_MINZOOM[state.tiling] || 2.5;
+  map.setLayerZoomRange('tiles-label', mz, 24);
+}
+
 /* ─────────── Tile loading ─────────── */
 async function loadTiles(continent, tiling) {
   showLoader(`Loading ${CONTINENT_NAMES[continent]} ${tiling} tiles…`);
@@ -538,6 +547,7 @@ async function loadTiles(continent, tiling) {
     // Reset statuses
     state.tilesData.features.forEach(f => delete f.properties.status);
     map.getSource('tiles').setData(state.tilesData);
+    applyTileLabelZoom();
 
     statTotal.textContent = state.tilesData.features.length.toLocaleString();
     statsSection.hidden = false;
@@ -1848,6 +1858,7 @@ async function pickCountryTiles(feature, name) {
 
     map.getSource('tiles').setData(state.tilesData);
     map.getSource('aoi').setData(feature);
+    applyTileLabelZoom();
     refreshGlobeData();
 
     // Stats + list (reuses the tile-list machinery)

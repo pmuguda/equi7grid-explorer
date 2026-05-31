@@ -99,6 +99,7 @@ function initMap() {
     center: [15, 20],
     zoom: 1.8,
     maxZoom: 14,
+    preserveDrawingBuffer: true,   // required so the canvas can be captured to PNG
   });
 
   map.on('load', onMapLoad);
@@ -1468,7 +1469,7 @@ async function initCartoBgTiles() {
 function initGlobe() {
   const container = $('globe-wrap');
 
-  globeInstance = Globe({ animateIn: false })(container)
+  globeInstance = Globe({ animateIn: false, rendererConfig: { preserveDrawingBuffer: true } })(container)
     .width(container.offsetWidth)
     .height(container.offsetHeight)
     .backgroundColor('#0d1117')
@@ -1717,6 +1718,33 @@ function resetToHome() {
   map.flyTo({ center: [15, 20], zoom: 1.8, duration: 700 });
 }
 $('btn-home').addEventListener('click', resetToHome);
+
+/* ─────────── Snapshot (map/globe canvas → PNG) ─────────── */
+function takeSnapshot() {
+  const canvas = (viewIs3D && globeInstance)
+    ? globeInstance.renderer().domElement
+    : (map && map.getCanvas());
+  if (!canvas) return;
+  const finish = () => {
+    try {
+      const tag = state.countryName ? state.countryName.replace(/[^\w]+/g, '_')
+                : state.continent ? state.continent : 'overview';
+      const a = document.createElement('a');
+      a.href = canvas.toDataURL('image/png');
+      a.download = `equi7grid_${viewIs3D ? '3d' : '2d'}_${tag}_${state.tiling}.png`;
+      a.click();
+    } catch (e) { showHint('Snapshot failed: ' + e.message); setTimeout(hideHint, 2500); }
+  };
+  // Force a fresh frame, then capture once it has painted to the buffer
+  if (!viewIs3D && map) {
+    map.triggerRepaint();
+    map.once('idle', finish);
+  } else {
+    // Globe renders via rAF; wait two frames so the latest paint is in the buffer
+    requestAnimationFrame(() => requestAnimationFrame(finish));
+  }
+}
+$('btn-snapshot').addEventListener('click', takeSnapshot);
 
 /* resize globe on window resize or sidebar collapse */
 window.addEventListener('resize', () => {

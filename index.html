@@ -16,7 +16,7 @@
         href="https://cdn.jsdelivr.net/npm/maplibre-gl@5.24.0/dist/maplibre-gl.css"
         integrity="sha384-uTttxo/aOKbdE5RlD/SPzSDoDmNvGlUYPjONi2MN/b7c9HPSvW07OIuyP7uL6jxK"
         crossorigin="anonymous">
-  <link rel="stylesheet" href="css/style.css?v=18">
+  <link rel="stylesheet" href="css/style.css?v=19">
 </head>
 <body>
 
@@ -184,6 +184,12 @@
       <path d="M3 9.5L10 3l7 6.5"/><path d="M5 8.5V16h10V8.5"/><path d="M8.5 16v-4h3v4"/>
     </svg>
   </button>
+  <button id="btn-snapshot" title="Download a PNG snapshot of the map" aria-label="Snapshot map">
+    <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M3 6.5h3l1.2-2h5.6L17 6.5h0a1 1 0 011 1v8a1 1 0 01-1 1H3a1 1 0 01-1-1v-8a1 1 0 011-1z"/>
+      <circle cx="10" cy="11" r="3"/>
+    </svg>
+  </button>
 
   <!-- Floating AOI toolbar — always visible, works in 2D and 3D -->
   <div id="aoi-toolbar">
@@ -255,6 +261,6 @@
   <script src="https://cdn.jsdelivr.net/npm/topojson-client@3.1.0/dist/topojson-client.min.js"
           integrity="sha384-Ukv1p/xTma6P4/2bY5KzWBw+ydSpXmhCMtyciIQVDJ1RmOxtCYNMF1uXT9T63H67"
           crossorigin="anonymous"></script>
-  <script src="js/app.js?v=60"></script>
+  <script src="js/app.js?v=62"></script>
 </body>
 </html>

@@ -38,7 +38,11 @@ let state = {
   polyVerts:   [],        // accumulated polygon vertices
   longName:    true,      // tile-name format: true = EU500M_E006N006T6, false = E006N006T6
   tileScope:   'all',     // which AOI tiles to list/copy/export: 'all' | 'land'
+  countryMode: false,     // when true: pick a country → show its intersecting Equi7 tiles
+  countryName: null,      // name of the currently picked country
 };
+
+const CONTINENT_IDS = Object.keys(CONTINENT_NAMES);  // ['AF','AN','AS','EU','NA','OC','SA']
 
 /* The AOI tile names matching the current scope ('all' or 'land'), sorted.
  * Land filtering uses the cached land set; if it isn't ready yet, falls back
@@ -192,6 +196,38 @@ function onMapLoad() {
       'line-dasharray': [3, 3],
     },
   });
+  /* ── Country-pick layers (hidden unless Country mode is on) ── */
+  map.addSource('cpick', { type: 'geojson', data: emptyFC() });
+  map.addLayer({
+    id: 'cpick-fill', type: 'fill', source: 'cpick',
+    layout: { visibility: 'none' },
+    paint: {
+      'fill-color': [
+        'case',
+        ['boolean', ['feature-state', 'selected'], false], '#58a6ff',
+        ['boolean', ['feature-state', 'hovered'],  false], '#58a6ff',
+        '#8b949e',
+      ],
+      'fill-opacity': [
+        'case',
+        ['boolean', ['feature-state', 'selected'], false], 0.35,
+        ['boolean', ['feature-state', 'hovered'],  false], 0.25,
+        0.04,
+      ],
+    },
+  });
+  map.addLayer({
+    id: 'cpick-line', type: 'line', source: 'cpick',
+    layout: { visibility: 'none' },
+    paint: {
+      'line-color': ['case', ['boolean', ['feature-state', 'selected'], false], '#58a6ff', '#8b949e'],
+      'line-width': ['case',
+        ['boolean', ['feature-state', 'selected'], false], 2,
+        ['boolean', ['feature-state', 'hovered'],  false], 1.5, 0.5],
+      'line-opacity': 0.8,
+    },
+  });
+
   /* Continent name labels (hardcoded points, better placement than polygon centroids) */
   map.addLayer({
     id: 'continent-labels',
@@ -349,7 +385,7 @@ function onMapLoad() {
   let hoveredZoneId = null;
 
   map.on('mousemove', 'zones-fill', e => {
-    if (state.drawMode) return;
+    if (state.drawMode || state.countryMode) return;
     map.getCanvas().style.cursor = 'pointer';
     if (e.features.length === 0) return;
     const id = e.features[0].properties.id;
@@ -361,7 +397,7 @@ function onMapLoad() {
   });
 
   map.on('mouseleave', 'zones-fill', () => {
-    if (state.drawMode) return;
+    if (state.drawMode || state.countryMode) return;
     map.getCanvas().style.cursor = '';
     if (hoveredZoneId)
       map.setFeatureState({ source: 'zones', id: hoveredZoneId }, { hover: false });
@@ -369,10 +405,14 @@ function onMapLoad() {
   });
 
   map.on('click', 'zones-fill', e => {
-    if (state.drawMode) return;
+    if (state.drawMode || state.countryMode) return;
     const id = e.features[0]?.properties?.id;
     if (id) selectContinent(id);
   });
+
+  /* ── Country mode: hover highlight + click to pick ── */
+  map.on('mousemove', e => { if (state.countryMode) handleCountryHover(e); });
+  map.on('click',     e => { if (state.countryMode) handleCountryClick(e); });
 
   /* drawing clicks */
   map.on('click', handleMapClick);
@@ -468,8 +508,16 @@ function zoomToContinent(id) {
 /* ─────────── Tiling radio ─────────── */
 document.querySelectorAll('input[name="tiling"]').forEach(input => {
   input.addEventListener('change', () => {
-    if (!state.continent) return;
     state.tiling = input.value;
+    // Country mode: re-pick the selected country at the new tiling
+    if (state.countryMode) {
+      if (selectedCountryId != null) {
+        const f = cpickFeatures.find(x => x.id === selectedCountryId);
+        if (f) pickCountryTiles(f, f.properties.name || `Region ${f.id}`);
+      }
+      return;
+    }
+    if (!state.continent) return;
     loadTiles(state.continent, state.tiling);
   });
 });
@@ -1672,6 +1720,197 @@ $('sidebar-toggle').addEventListener('click', () => {
     }, 300);
   }
 });
+
+/* ════════════════ COUNTRY MODE ════════════════
+ * Toggle off the zone→tiles workflow; instead hover/click a country and show
+ * only the Equi7 tiles (current tiling) that intersect it. A country can span
+ * several continents, so we detect the overlapping zones, load those tile sets,
+ * and keep the tiles that intersect the country polygon. */
+let cpickLoaded = false;
+let cpickFeatures = [];      // full country features (unclipped geometry) by reference
+let hoveredCountryId = null;
+let selectedCountryId = null;
+const tileFileCache = {};   // 'CONT_TILING' → FeatureCollection
+
+/* Make antimeridian-crossing rings continuous so Russia/Fiji don't smear a
+ * fill band across the map (ported from bboxer). */
+function unwrapAntimeridian(geom) {
+  if (!geom) return;
+  const fixRing = ring => {
+    for (let i = 1; i < ring.length; i++) {
+      const d = ring[i][0] - ring[i - 1][0];
+      if (d > 180) ring[i][0] -= 360;
+      else if (d < -180) ring[i][0] += 360;
+    }
+  };
+  if (geom.type === 'Polygon') geom.coordinates.forEach(fixRing);
+  else if (geom.type === 'MultiPolygon') geom.coordinates.forEach(p => p.forEach(fixRing));
+}
+
+async function loadCountriesForPick() {
+  if (cpickLoaded) return;
+  try {
+    const fc = await fetchCountries();   // cached world-atlas countries
+    // Clone so unwrap doesn't corrupt the shared land-detection geometry
+    const feats = fc.features.map((f, i) => ({
+      type: 'Feature',
+      id: Number(f.id) || i + 1,           // numeric id required for feature-state
+      properties: { name: f.properties?.name || `Region ${f.id}` },
+      geometry: JSON.parse(JSON.stringify(f.geometry)),
+    }));
+    feats.forEach(f => unwrapAntimeridian(f.geometry));
+    cpickFeatures = feats;
+    map.getSource('cpick').setData({ type: 'FeatureCollection', features: feats });
+    cpickLoaded = true;
+  } catch (e) {
+    showHint('Failed to load country data', 3000);
+  }
+}
+
+function handleCountryHover(e) {
+  const tip = $('country-tooltip');
+  const feats = map.queryRenderedFeatures(e.point, { layers: ['cpick-fill'] });
+  if (!feats.length) {
+    if (hoveredCountryId != null && hoveredCountryId !== selectedCountryId)
+      map.setFeatureState({ source: 'cpick', id: hoveredCountryId }, { hovered: false });
+    hoveredCountryId = null;
+    tip.hidden = true;
+    return;
+  }
+  const f = feats[0];
+  if (f.id == null) return;
+  if (f.id !== hoveredCountryId) {
+    if (hoveredCountryId != null && hoveredCountryId !== selectedCountryId)
+      map.setFeatureState({ source: 'cpick', id: hoveredCountryId }, { hovered: false });
+    hoveredCountryId = f.id;
+    map.setFeatureState({ source: 'cpick', id: hoveredCountryId }, { hovered: true });
+  }
+  tip.hidden = false;
+  tip.textContent = f.properties.name || `Region ${f.id}`;
+  tip.style.left = (e.originalEvent.clientX + 14) + 'px';
+  tip.style.top  = (e.originalEvent.clientY - 30) + 'px';
+}
+
+function handleCountryClick(e) {
+  const feats = map.queryRenderedFeatures(e.point, { layers: ['cpick-fill'] });
+  if (!feats.length) return;
+  const f = feats[0];
+  if (selectedCountryId != null && selectedCountryId !== f.id)
+    map.setFeatureState({ source: 'cpick', id: selectedCountryId }, { selected: false });
+  selectedCountryId = f.id;
+  map.setFeatureState({ source: 'cpick', id: f.id }, { selected: true, hovered: false });
+  // Use the full (unclipped) feature for intersection, not the rendered one
+  const full = cpickFeatures.find(x => x.id === f.id) || f;
+  pickCountryTiles(full, f.properties.name || `Region ${f.id}`);
+}
+
+/* Fetch + merge the tile files for the given continents at one tiling level. */
+async function fetchTilesForContinents(continents, tiling) {
+  const all = [];
+  for (const c of continents) {
+    const key = `${c}_${tiling}`;
+    if (!tileFileCache[key]) {
+      try {
+        const res = await fetch(`data/tiles/${c.toLowerCase()}_${tiling.toLowerCase()}.geojson`);
+        tileFileCache[key] = res.ok ? await res.json() : emptyFC();
+      } catch (_) { tileFileCache[key] = emptyFC(); }
+    }
+    all.push(...tileFileCache[key].features);
+  }
+  return all;
+}
+
+async function pickCountryTiles(feature, name) {
+  const tiling = currentTiling();
+  showLoader(`Finding ${tiling} tiles in ${name}…`);
+  state.countryName = name;
+
+  // Continents whose Equi7 zone overlaps this country
+  const overlapping = CONTINENT_IDS.filter(c => {
+    const zf = zonesGeoJSON?.features.find(z => z.properties.id === c);
+    try { return zf && turf.booleanIntersects(feature, zf); } catch (_) { return false; }
+  });
+
+  const candidates = await fetchTilesForContinents(overlapping, tiling);
+
+  // Defer heavy intersection so the loader paints first
+  setTimeout(() => {
+    const inside = [];
+    for (const t of candidates) {
+      let hit = false;
+      try { hit = turf.booleanIntersects(t, feature); } catch (_) {}
+      if (hit) inside.push({ ...t, properties: { ...t.properties, status: 'inside' } });
+    }
+    state.continent = null;
+    state.tilesData = { type: 'FeatureCollection', features: inside };
+    state.intersecting = new Set(inside.map(f => f.properties.name));
+    state.aoi = feature;
+
+    map.getSource('tiles').setData(state.tilesData);
+    map.getSource('aoi').setData(feature);
+    refreshGlobeData();
+
+    // Stats + list (reuses the tile-list machinery)
+    statsSection.hidden = false;
+    $('zone-group-label').textContent = `Country · ${name}`;
+    statTotal.textContent = inside.length.toLocaleString();
+    aoiResults.hidden = false;
+    renderTileList();
+    exportSection.hidden = inside.length === 0;
+
+    const bb = turf.bbox(feature);
+    map.fitBounds([[bb[0], bb[1]], [bb[2], bb[3]]], { padding: 60, maxZoom: 8, duration: 700 });
+    hideLoader();
+  }, 0);
+}
+
+function setCountriesPickVisible(on) {
+  ['cpick-fill', 'cpick-line'].forEach(id => {
+    if (map.getLayer(id)) map.setLayoutProperty(id, 'visibility', on ? 'visible' : 'none');
+  });
+  // Hide the colored zone overview while picking countries (keeps it clean)
+  ['zones-fill', 'zones-line', 'zones-seam-line', 'continent-labels'].forEach(id => {
+    if (map.getLayer(id)) map.setLayoutProperty(id, 'visibility', on ? 'none' : 'visible');
+  });
+}
+
+function setCountryMode(on) {
+  state.countryMode = on;
+  const btn = $('btn-country-mode');
+  btn.classList.toggle('active', on);
+  btn.setAttribute('aria-pressed', String(on));
+  $('country-hint').hidden = !on;
+  document.body.classList.toggle('mode-country', on);
+
+  if (on) {
+    // Exit any zone selection / AOI / draw and clear the map
+    if (viewIs3D) $('btn-2d').click();
+    disableDrawMode();
+    if (state.continent) map.setFeatureState({ source: 'zones', id: state.continent }, { selected: false });
+    state.continent = null; state.aoi = null; state.intersecting = new Set();
+    state.tilesData = null;
+    map.getSource('tiles').setData(emptyFC());
+    map.getSource('aoi').setData(emptyFC());
+    tilingSection.hidden = false;            // user still chooses T6/T3/T1
+    $('no-selection-hint').hidden = true;
+    statsSection.hidden = true;
+    exportSection.hidden = true;
+    $('aoi-toolbar').style.display = 'none';  // draw/upload AOI tools off in country mode
+    setCountriesPickVisible(true);
+    loadCountriesForPick();
+    regenerateGraticule();
+  } else {
+    setCountriesPickVisible(false);
+    $('country-tooltip').hidden = true;
+    $('aoi-toolbar').style.display = '';
+    if (hoveredCountryId != null) { map.setFeatureState({ source: 'cpick', id: hoveredCountryId }, { hovered: false }); hoveredCountryId = null; }
+    if (selectedCountryId != null) { map.setFeatureState({ source: 'cpick', id: selectedCountryId }, { selected: false }); selectedCountryId = null; }
+    state.countryName = null;
+    $('zone-group-label').textContent = 'Selected E7 zone';
+    resetToHome();
+  }
+}
+$('btn-country-mode').addEventListener('click', () => setCountryMode(!state.countryMode));
 
 /* ─────────── Utilities ─────────── */
 function emptyFC() {

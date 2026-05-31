@@ -16,7 +16,7 @@
         href="https://cdn.jsdelivr.net/npm/maplibre-gl@5.24.0/dist/maplibre-gl.css"
         integrity="sha384-uTttxo/aOKbdE5RlD/SPzSDoDmNvGlUYPjONi2MN/b7c9HPSvW07OIuyP7uL6jxK"
         crossorigin="anonymous">
-  <link rel="stylesheet" href="css/style.css?v=17">
+  <link rel="stylesheet" href="css/style.css?v=18">
 </head>
 <body>
 
@@ -35,6 +35,17 @@
     <div id="no-selection-hint" class="panel-section">
       <p class="section-hint" style="margin-bottom:0">Click a colored zone on the map to select a continent.</p>
     </div>
+
+    <!-- COUNTRY MODE -->
+    <section class="panel-section" id="country-section">
+      <button class="mode-toggle-btn" id="btn-country-mode" aria-pressed="false">
+        <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
+          <circle cx="10" cy="10" r="7.5"/><path d="M2.5 10h15M10 2.5c2.4 2 2.4 13 0 15M10 2.5c-2.4 2-2.4 13 0 15"/>
+        </svg>
+        Country mode
+      </button>
+      <p class="section-hint" id="country-hint" hidden style="margin:8px 0 0">Hover a country · click to show its Equi7 tiles.</p>
+    </section>
 
     <!-- TILING SYSTEM -->
     <section class="panel-section" id="tiling-section" hidden>
@@ -214,6 +225,9 @@
   <!-- live lat/lng coordinate readout (2D) -->
   <div id="coord-readout" hidden></div>
 
+  <!-- country hover tooltip -->
+  <div id="country-tooltip" hidden></div>
+
   <!-- hint banner shown while drawing -->
   <div id="hint-banner" hidden></div>
 
@@ -241,6 +255,6 @@
   <script src="https://cdn.jsdelivr.net/npm/topojson-client@3.1.0/dist/topojson-client.min.js"
           integrity="sha384-Ukv1p/xTma6P4/2bY5KzWBw+ydSpXmhCMtyciIQVDJ1RmOxtCYNMF1uXT9T63H67"
           crossorigin="anonymous"></script>
-  <script src="js/app.js?v=56"></script>
+  <script src="js/app.js?v=58"></script>
 </body>
 </html>

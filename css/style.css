@@ -536,6 +536,57 @@ body { display: flex; background: var(--bg); color: var(--text); font-size: 14px
   user-select: none;
 }
 
+/* ── Country mode toggle button ── */
+.mode-toggle-btn {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 9px 12px;
+  border-radius: 8px;
+  border: 1.5px solid var(--border);
+  background: var(--bg);
+  color: var(--text);
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+.mode-toggle-btn svg { width: 17px; height: 17px; }
+.mode-toggle-btn:hover { border-color: var(--accent); color: var(--accent); }
+.mode-toggle-btn.active {
+  border-color: var(--accent);
+  background: rgba(88,166,255,0.14);
+  color: var(--accent);
+  box-shadow: 0 0 0 2px rgba(88,166,255,0.18);
+}
+
+/* Country hover tooltip */
+#country-tooltip {
+  position: fixed;
+  z-index: 50;
+  pointer-events: none;
+  background: rgba(13,17,23,0.93);
+  border: 1px solid var(--accent);
+  padding: 4px 10px;
+  border-radius: 6px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text);
+  backdrop-filter: blur(6px);
+  box-shadow: 0 2px 10px rgba(0,0,0,0.4);
+  white-space: nowrap;
+}
+body.mode-country .maplibregl-canvas { cursor: pointer !important; }
+
+/* In country mode the stats are just a tile count + list — hide the
+   land breakdown and the AOI sub-grid (redundant for a picked country). */
+body.mode-country .stat-card.land { display: none; }
+body.mode-country .stats-grid { grid-template-columns: 1fr; }
+body.mode-country #aoi-results > .stats-grid,
+body.mode-country #aoi-results > .stats-group-label { display: none; }
+
 /* ── Live coordinate readout ── */
 #coord-readout {
   position: fixed;

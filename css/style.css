@@ -502,15 +502,17 @@ body { display: flex; background: var(--bg); color: var(--text); font-size: 14px
 .footer-author {
   display: block;
   font-size: 11px;
-  font-weight: 600;
+  color: var(--muted);        /* "Made by" — same muted gray as the grid-data credit */
   margin-bottom: 4px;
-  /* Same blue→purple gradient as the Buy-me-a-coffee button, clipped to text */
+}
+.author-name {
+  font-weight: 600;
+  /* Name only — same blue→purple gradient as the Buy-me-a-coffee button */
   background: linear-gradient(135deg, #4393c3, #9b59b6);
   -webkit-background-clip: text;
   background-clip: text;
   -webkit-text-fill-color: transparent;
   color: transparent;
-  width: fit-content;
 }
 .footer-credit { display: block; }
 

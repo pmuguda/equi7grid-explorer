@@ -134,10 +134,24 @@ function onMapLoad() {
     type: 'geojson',
     data: emptyFC(),
   });
+  // Lat/lng graticule (gridlines) over the basemap
+  map.addSource('graticule', { type: 'geojson', data: buildGraticule(15) });
 
   // No country-border overlay in 2D — the CARTO basemap already renders
   // subtle country borders. Adding white lines on top caused very visible
   // "horizontal lines" across zone fills (many African borders follow parallels).
+
+  /* ── Graticule gridlines (sit on the basemap, under the zones) ── */
+  map.addLayer({
+    id: 'graticule-line',
+    type: 'line',
+    source: 'graticule',
+    paint: {
+      'line-color': '#ffffff',
+      'line-width': 0.5,
+      'line-opacity': 0.12,
+    },
+  });
 
   /* ── Zone layers (canonical 7-zone partition) ── */
   map.addLayer({
@@ -1640,6 +1654,26 @@ $('sidebar-toggle').addEventListener('click', () => {
 /* ─────────── Utilities ─────────── */
 function emptyFC() {
   return { type: 'FeatureCollection', features: [] };
+}
+
+/* Build a lat/lng graticule as a LineString FeatureCollection.
+ * Meridians every `step`° (full pole-to-pole), parallels every `step`°.
+ * Lines are densified so they stay smooth under any map projection. */
+function buildGraticule(step = 15) {
+  const features = [];
+  // Meridians (constant longitude, vary latitude)
+  for (let lng = -180; lng <= 180; lng += step) {
+    const coords = [];
+    for (let lat = -85; lat <= 85; lat += 2) coords.push([lng, lat]);
+    features.push({ type: 'Feature', properties: {}, geometry: { type: 'LineString', coordinates: coords } });
+  }
+  // Parallels (constant latitude, vary longitude)
+  for (let lat = -75; lat <= 75; lat += step) {
+    const coords = [];
+    for (let lng = -180; lng <= 180; lng += 2) coords.push([lng, lat]);
+    features.push({ type: 'Feature', properties: {}, geometry: { type: 'LineString', coordinates: coords } });
+  }
+  return { type: 'FeatureCollection', features };
 }
 
 /* Escape a string for safe interpolation into HTML. */

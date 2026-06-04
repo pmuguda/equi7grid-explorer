@@ -58,3 +58,8 @@ python scripts/generate_tiles.py
 ## Credits
 
 Grid definition and data: [TUW-GEO/Equi7Grid](https://github.com/TUW-GEO/Equi7Grid) · MIT License
+
+## Acknowledgements
+This project was developed with AI assistance (Claude by Anthropic) for code 
+generation and debugging. Architecture decisions, refinements, and 
+ongoing maintenance are made by me.

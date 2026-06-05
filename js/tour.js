@@ -21,11 +21,24 @@
       target: '#map',
       placement: 'left',
       heading: '7 Continental Zones',
-      body: 'The map shows 7 colour-coded zones:<br><br>'
-          + '🟡 <strong>Africa</strong> &nbsp;🟢 <strong>Antarctica</strong> &nbsp;🟠 <strong>Asia</strong><br>'
-          + '🔵 <strong>Europe</strong> &nbsp;🔴 <strong>N. America</strong><br>'
-          + '🟣 <strong>S. America</strong> &nbsp;🩵 <strong>Oceania</strong><br><br>'
-          + '<strong>Click any coloured zone</strong> to select it and load the tile grid.',
+      body: (function () {
+        const dot = (hex) => `<span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:${hex};vertical-align:middle;margin-right:5px;flex-shrink:0"></span>`;
+        const z = [
+          ['#e6a817', 'Africa'],
+          ['#74c476', 'Antarctica'],
+          ['#fd7f28', 'Asia'],
+          ['#4393c3', 'Europe'],
+          ['#d9534f', 'N. America'],
+          ['#9b59b6', 'S. America'],
+          ['#20b2aa', 'Oceania'],
+        ];
+        const rows = z.map(([hex, name]) =>
+          `<span style="display:inline-flex;align-items:center;margin-bottom:5px;margin-right:12px;white-space:nowrap">${dot(hex)}<strong>${name}</strong></span>`
+        ).join('');
+        return 'The map shows 7 colour-coded zones:<br><br>'
+          + `<div style="display:flex;flex-wrap:wrap;gap:2px 0;margin-bottom:12px">${rows}</div>`
+          + '<strong>Click any coloured zone</strong> to select it and load its tile grid.';
+      }()),
       showIds: [],
     },
     /* 2 ─ 2D / 3D toggle */

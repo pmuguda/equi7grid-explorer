@@ -11,7 +11,7 @@
     {
       target: null,
       placement: 'center',
-      heading: 'Equi7Grid Explorer',
+      heading: 'e7.grid.explorer',
       body: 'A visual explorer for the <strong>Equi7 discrete global grid</strong> — a tiling system for satellite Earth observation developed at TU Wien.',
       showIds: [],
       isWelcome: true,
@@ -277,22 +277,20 @@
     tooltipEl.className = 'tt-animate';
 
     if (step.isWelcome) {
-      tooltipEl.classList.add('tt-center');
+      tooltipEl.classList.add('tt-center', 'tt-welcome');
 
       const logo = document.createElement('div');
       logo.className = 'tt-logo';
-      logo.textContent = 'E7';
+      logo.innerHTML = '<img src="assets/equi7grid-logo-map.png" alt=""><span class="tt-logo-bbox"></span>';
       tooltipEl.appendChild(logo);
 
       const h = document.createElement('div');
       h.className = 'tt-heading';
-      h.style.textAlign = 'center';
       h.textContent = step.heading;
       tooltipEl.appendChild(h);
 
       const b = document.createElement('div');
       b.className = 'tt-body';
-      b.style.textAlign = 'center';
       b.innerHTML = step.body;
       tooltipEl.appendChild(b);
 

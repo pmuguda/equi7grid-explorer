@@ -93,6 +93,58 @@ const tileList       = $('tile-list');
 const tileListWrap   = $('tile-list-wrap');
 const clearAoiBtn    = $('btn-clear-aoi');
 
+const TILING_META = {
+  T6: 'T6 · 600 KM',
+  T3: 'T3 · 300 KM',
+  T1: 'T1 · 100 KM',
+};
+
+function updateTrayMeta() {
+  const startMeta = $('start-meta');
+  const tilingMeta = $('tiling-meta');
+  const statsMeta = $('stats-meta');
+  const exportMeta = $('export-meta');
+
+  if (startMeta) startMeta.textContent = state.continent ? state.continent : 'SELECT ZONE';
+  if (tilingMeta) tilingMeta.textContent = TILING_META[state.tiling] || TILING_META[currentTiling()] || 'T6 · 600 KM';
+
+  if (statsMeta) {
+    if (state.intersecting.size > 0) {
+      statsMeta.textContent = `${state.intersecting.size.toLocaleString()} AOI`;
+    } else if (state.tilesData?.features?.length) {
+      statsMeta.textContent = `${state.tilesData.features.length.toLocaleString()} TILES`;
+    } else {
+      statsMeta.textContent = '— TILES';
+    }
+  }
+
+  if (exportMeta) {
+    exportMeta.textContent = exportSection.hidden
+      ? 'GEOJSON'
+      : `${activeTileNames().length.toLocaleString()} TILES`;
+  }
+}
+
+function setTrayCollapsed(tray, collapsed) {
+  const btn = tray?.querySelector('.tray-toggle');
+  const body = btn ? document.getElementById(btn.getAttribute('aria-controls')) : null;
+  if (!btn || !body) return;
+  tray.classList.toggle('is-collapsed', collapsed);
+  btn.setAttribute('aria-expanded', String(!collapsed));
+  body.hidden = collapsed;
+}
+
+function expandTray(selector) {
+  const tray = document.querySelector(selector);
+  if (tray) setTrayCollapsed(tray, false);
+}
+window.expandTray = expandTray;
+
+document.querySelectorAll('.tray-section .tray-toggle').forEach(btn => {
+  const tray = btn.closest('.tray-section');
+  btn.addEventListener('click', () => setTrayCollapsed(tray, !tray.classList.contains('is-collapsed')));
+});
+
 /* ── Map ── */
 let map;
 
@@ -479,6 +531,7 @@ function selectContinent(id) {
   state.tiling = currentTiling();
   state.aoi = null;
   state.intersecting = new Set();
+  updateTrayMeta();
 
   // Highlight selected zone; hide overview labels when zoomed in
   map.setFeatureState({ source: 'zones', id }, { selected: true });
@@ -494,6 +547,7 @@ function selectContinent(id) {
   aoiResults.hidden     = true;
   statLand.textContent  = '—';
   statInsideLand.textContent = '—';
+  updateTrayMeta();
 
   // Reset AOI source
   map.getSource('aoi').setData(emptyFC());
@@ -524,6 +578,7 @@ document.querySelectorAll('#tiling-toggle .seg-btn').forEach(btn => {
     document.querySelectorAll('#tiling-toggle .seg-btn')
       .forEach(b => b.classList.toggle('active', b === btn));
     state.tiling = btn.dataset.tiling;
+    updateTrayMeta();
     // Country mode: re-pick the selected country at the new tiling
     if (state.countryMode) {
       if (selectedCountryId != null) {
@@ -570,6 +625,7 @@ async function loadTiles(continent, tiling) {
 
     statTotal.textContent = state.tilesData.features.length.toLocaleString();
     statsSection.hidden = false;
+    updateTrayMeta();
     hideLoader();
 
     // Let the tile grid paint before slower follow-up calculations.
@@ -700,7 +756,11 @@ function computeLandTiles() {
 
 /* ─── Tile list renderer (truncated, formatted names) ─── */
 function renderTileList() {
-  if (state.intersecting.size === 0) { tileListWrap.hidden = true; return; }
+  if (state.intersecting.size === 0) {
+    tileListWrap.hidden = true;
+    updateTrayMeta();
+    return;
+  }
   tileListWrap.hidden = false;
 
   const names = activeTileNames();
@@ -725,14 +785,17 @@ function renderTileList() {
     addLi(`··· ${names.length - MAX_HEAD - MAX_TAIL} more ···`, 'tile-ellipsis');
     names.slice(-MAX_TAIL).forEach(n => addLi(fmt(n)));
   }
+  updateTrayMeta();
 }
 
 function updateStats(insideSet) {
   statInside.textContent = insideSet.size.toLocaleString();
   exportSection.hidden   = insideSet.size === 0;
+  updateTrayMeta();
 
   if (insideSet.size === 0) {
     aoiResults.hidden = true;
+    updateTrayMeta();
     return;
   }
   aoiResults.hidden = false;
@@ -745,6 +808,7 @@ function updateStats(insideSet) {
     statInsideLand.textContent = n.toLocaleString();
     // Land set may have resolved after the first render — refresh if scoped to land
     if (state.tileScope === 'land') renderTileList();
+    updateTrayMeta();
   }).catch(() => { statInsideLand.textContent = '?'; });
 
   renderTileList();
@@ -899,6 +963,7 @@ clearAoiBtn.addEventListener('click', () => {
     map.getSource('tiles').setData(reset);
     refreshGlobeData();
   }
+  updateTrayMeta();
 });
 
 /* ─────────── File upload ─────────── */
@@ -951,6 +1016,7 @@ function setNameMode(long) {
   $('btn-name-long').classList.toggle('active', long);
   $('btn-name-short').classList.toggle('active', !long);
   if (state.intersecting.size > 0) renderTileList();
+  updateTrayMeta();
 }
 $('btn-name-long').addEventListener('click', () => setNameMode(true));
 $('btn-name-short').addEventListener('click', () => setNameMode(false));
@@ -960,6 +1026,7 @@ function setTileScope(scope) {
   $('btn-scope-all').classList.toggle('active', scope === 'all');
   $('btn-scope-land').classList.toggle('active', scope === 'land');
   if (state.intersecting.size > 0) renderTileList();
+  updateTrayMeta();
 }
 $('btn-scope-all').addEventListener('click', () => setTileScope('all'));
 $('btn-scope-land').addEventListener('click', () => {
@@ -1762,6 +1829,7 @@ function resetToHome() {
   state.tiling = 'T6';
   setNameMode(true);
   setTileScope('all');
+  updateTrayMeta();
 
   // Fly back to the opening view
   map.flyTo({ center: [15, 20], zoom: 1.8, duration: 700 });
@@ -1973,6 +2041,7 @@ async function pickCountryTiles(feature, name) {
     aoiResults.hidden = false;
     renderTileList();
     exportSection.hidden = inside.length === 0;
+    updateTrayMeta();
 
     const bb = turf.bbox(feature);
     map.fitBounds([[bb[0], bb[1]], [bb[2], bb[3]]], { padding: 60, maxZoom: 8, duration: 700 });
@@ -2010,6 +2079,7 @@ function setCountryMode(on) {
     $('no-selection-hint').hidden = true;
     statsSection.hidden = true;
     exportSection.hidden = true;
+    updateTrayMeta();
     $('aoi-toolbar').style.display = 'none';  // draw/upload AOI tools off in country mode
     setCountriesPickVisible(true);
     loadCountriesForPick();
@@ -2210,3 +2280,4 @@ function hideLoader() {
 
 /* ─────────── Boot ─────────── */
 initMap();
+updateTrayMeta();

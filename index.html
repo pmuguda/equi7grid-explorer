@@ -19,8 +19,8 @@
         href="https://cdn.jsdelivr.net/npm/maplibre-gl@5.24.0/dist/maplibre-gl.css"
         integrity="sha384-uTttxo/aOKbdE5RlD/SPzSDoDmNvGlUYPjONi2MN/b7c9HPSvW07OIuyP7uL6jxK"
         crossorigin="anonymous">
-  <link rel="stylesheet" href="css/style.css?v=27">
-  <link rel="stylesheet" href="css/tour.css?v=4">
+  <link rel="stylesheet" href="css/style.css?v=33">
+  <link rel="stylesheet" href="css/tour.css?v=6">
 </head>
 <body>
 
@@ -29,21 +29,11 @@
 
     <header class="sidebar-header">
       <div class="logo-mark" aria-hidden="true">
-        <svg viewBox="0 0 46 46" role="img">
-          <rect class="logo-frame" x="7.5" y="7.5" width="31" height="31"/>
-          <path class="logo-grid" d="M14 23h18M23 14v18"/>
-          <path class="logo-arc" d="M14 17c5.2 3.4 12.8 3.4 18 0M14 29c5.2-3.4 12.8-3.4 18 0"/>
-          <path class="logo-zone logo-zone-a" d="M23 14l9 3v12l-9 3z"/>
-          <path class="logo-zone logo-zone-b" d="M23 14l-9 3v12l9 3z"/>
-          <path class="logo-route" d="M12 34L34 12"/>
-          <circle class="logo-node" cx="12" cy="34" r="1.8"/>
-          <circle class="logo-node" cx="23" cy="23" r="1.8"/>
-          <circle class="logo-node" cx="34" cy="12" r="1.8"/>
-          <text x="23" y="27" text-anchor="middle">7</text>
-        </svg>
+        <img src="assets/equi7grid-logo-map.png" alt="">
+        <span class="logo-bbox"></span>
       </div>
       <div class="sidebar-brand">
-        <h1>equi<span class="header-sep">·</span>7grid</h1>
+        <h1>e7<span class="header-sep">.</span>grid<span class="header-sep">.</span>explorer</h1>
         <p>Explorer for the TU Wien discrete global grid</p>
       </div>
       <div class="header-right">
@@ -55,92 +45,100 @@
     </header>
 
     <!-- No-selection hint -->
-    <div id="no-selection-hint" class="panel-section">
-      <div class="mod-h"><span class="ix">00</span><span class="ttl">Start</span><span class="rule"></span></div>
-      <p class="section-hint" style="margin-bottom:0">Click a colored zone on the map to select a continent.</p>
+    <div id="no-selection-hint" class="panel-section tray-section">
+      <button class="mod-h tray-toggle" type="button" aria-expanded="true" aria-controls="start-tray"><span class="ix">00</span><span class="ttl">Start</span><span class="rule"></span><span class="meta" id="start-meta">SELECT ZONE</span><span class="chev" aria-hidden="true"></span></button>
+      <div class="tray-body" id="start-tray">
+        <p class="section-hint" style="margin-bottom:0">Click a colored zone on the map to select a continent.</p>
+      </div>
     </div>
 
 
     <!-- TILING SYSTEM -->
-    <section class="panel-section" id="tiling-section" hidden>
-      <h2 class="section-title"><span class="ix">01</span><span class="ttl">Tiling System</span><span class="rule"></span></h2>
-      <div class="seg-toggle" id="tiling-toggle" role="group" aria-label="Tiling system">
-        <button class="seg-btn active" data-tiling="T6"><strong>T6</strong><em>600 km</em></button>
-        <button class="seg-btn" data-tiling="T3"><strong>T3</strong><em>300 km</em></button>
-        <button class="seg-btn" data-tiling="T1"><strong>T1</strong><em>100 km</em></button>
+    <section class="panel-section tray-section" id="tiling-section" hidden>
+      <button class="section-title tray-toggle" type="button" aria-expanded="true" aria-controls="tiling-tray"><span class="ix">01</span><span class="ttl">Tiling System</span><span class="rule"></span><span class="meta" id="tiling-meta">T6 · 600 KM</span><span class="chev" aria-hidden="true"></span></button>
+      <div class="tray-body" id="tiling-tray">
+        <div class="seg-toggle" id="tiling-toggle" role="group" aria-label="Tiling system">
+          <button class="seg-btn active" data-tiling="T6"><strong>T6</strong><em>600 km</em></button>
+          <button class="seg-btn" data-tiling="T3"><strong>T3</strong><em>300 km</em></button>
+          <button class="seg-btn" data-tiling="T1"><strong>T1</strong><em>100 km</em></button>
+        </div>
       </div>
     </section>
 
     <!-- STATS — shown immediately when zone is selected -->
-    <section class="panel-section" id="stats-section" hidden>
-      <h2 class="section-title"><span class="ix">02</span><span class="ttl">Tile Results</span><span class="rule"></span></h2>
+    <section class="panel-section tray-section" id="stats-section" hidden>
+      <button class="section-title tray-toggle" type="button" aria-expanded="true" aria-controls="stats-tray"><span class="ix">02</span><span class="ttl">Tile Results</span><span class="rule"></span><span class="meta" id="stats-meta">— TILES</span><span class="chev" aria-hidden="true"></span></button>
 
-      <p class="stats-group-label" id="zone-group-label">Selected E7 zone</p>
-      <div class="stats-grid">
-        <div class="stat-card total">
-          <span class="stat-num" id="stat-total">—</span>
-          <span class="stat-lbl">Total tiles</span>
-        </div>
-        <div class="stat-card land">
-          <span class="stat-num" id="stat-land">—</span>
-          <span class="stat-lbl">On land</span>
-        </div>
-      </div>
-
-      <!-- AOI results — shown once user applies an AOI -->
-      <div id="aoi-results" hidden>
-        <p class="stats-group-label">Within drawn / uploaded AOI</p>
+      <div class="tray-body" id="stats-tray">
+        <p class="stats-group-label" id="zone-group-label">Selected E7 zone</p>
         <div class="stats-grid">
-          <div class="stat-card inside">
-            <span class="stat-num" id="stat-inside">—</span>
-            <span class="stat-lbl">Intersecting</span>
+          <div class="stat-card total">
+            <span class="stat-num" id="stat-total">—</span>
+            <span class="stat-lbl">Total tiles</span>
           </div>
           <div class="stat-card land">
-            <span class="stat-num" id="stat-inside-land">—</span>
+            <span class="stat-num" id="stat-land">—</span>
             <span class="stat-lbl">On land</span>
           </div>
         </div>
-        <div id="tile-list-wrap" hidden>
-          <div class="tile-list-header-row">
-            <p class="section-hint" style="margin:0"><span id="tile-list-count">0</span> tiles</p>
-            <div class="name-toggle-pills">
-              <button class="name-pill active" id="btn-name-long" title="Long: EU500M_E006N006T6">Long</button>
-              <button class="name-pill" id="btn-name-short" title="Short: E006N006T6">Short</button>
+
+        <!-- AOI results — shown once user applies an AOI -->
+        <div id="aoi-results" hidden>
+          <p class="stats-group-label">Within drawn / uploaded AOI</p>
+          <div class="stats-grid">
+            <div class="stat-card inside">
+              <span class="stat-num" id="stat-inside">—</span>
+              <span class="stat-lbl">Intersecting</span>
+            </div>
+            <div class="stat-card land">
+              <span class="stat-num" id="stat-inside-land">—</span>
+              <span class="stat-lbl">On land</span>
             </div>
           </div>
-          <div class="tile-list-header-row" style="margin-top:0">
-            <p class="section-hint" style="margin:0">Show</p>
-            <div class="name-toggle-pills">
-              <button class="name-pill active" id="btn-scope-all" title="All tiles intersecting the AOI">All</button>
-              <button class="name-pill" id="btn-scope-land" title="Only AOI tiles that touch land">On land</button>
+          <div id="tile-list-wrap" hidden>
+            <div class="tile-list-header-row">
+              <p class="section-hint" style="margin:0"><span id="tile-list-count">0</span> tiles</p>
+              <div class="name-toggle-pills">
+                <button class="name-pill active" id="btn-name-long" title="Long: EU500M_E006N006T6">Long</button>
+                <button class="name-pill" id="btn-name-short" title="Short: E006N006T6">Short</button>
+              </div>
             </div>
-          </div>
-          <ul id="tile-list"></ul>
-          <div class="sampling-row">
-            <label for="sampling-input">Sampling</label>
-            <input type="number" id="sampling-input" value="500" min="1" step="1">
-            <span class="unit">m</span>
-            <button id="btn-copy-tiles" title="Copy all tile names as Python list">
-              <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
-                <rect x="5" y="5" width="8" height="9" rx="1"/>
-                <path d="M3 11V3a1 1 0 011-1h7"/>
-              </svg>
-              Copy
-            </button>
+            <div class="tile-list-header-row" style="margin-top:0">
+              <p class="section-hint" style="margin:0">Show</p>
+              <div class="name-toggle-pills">
+                <button class="name-pill active" id="btn-scope-all" title="All tiles intersecting the AOI">All</button>
+                <button class="name-pill" id="btn-scope-land" title="Only AOI tiles that touch land">On land</button>
+              </div>
+            </div>
+            <ul id="tile-list"></ul>
+            <div class="sampling-row">
+              <label for="sampling-input">Sampling</label>
+              <input type="number" id="sampling-input" value="500" min="1" step="1">
+              <span class="unit">m</span>
+              <button id="btn-copy-tiles" title="Copy all tile names as Python list">
+                <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+                  <rect x="5" y="5" width="8" height="9" rx="1"/>
+                  <path d="M3 11V3a1 1 0 011-1h7"/>
+                </svg>
+                Copy
+              </button>
+            </div>
           </div>
         </div>
       </div>
     </section>
 
     <!-- EXPORT -->
-    <section class="panel-section" id="export-section" hidden>
-      <div class="mod-h"><span class="ix">03</span><span class="ttl">Export</span><span class="rule"></span></div>
-      <button class="export-btn" id="btn-export">
-        <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.8">
-          <path d="M10 13V3M6 9l4 4 4-4"/><path d="M3 15v1a1 1 0 001 1h12a1 1 0 001-1v-1"/>
-        </svg>
-        Export GeoJSON
-      </button>
+    <section class="panel-section tray-section" id="export-section" hidden>
+      <button class="mod-h tray-toggle" type="button" aria-expanded="true" aria-controls="export-tray"><span class="ix">03</span><span class="ttl">Export</span><span class="rule"></span><span class="meta" id="export-meta">GEOJSON</span><span class="chev" aria-hidden="true"></span></button>
+      <div class="tray-body" id="export-tray">
+        <button class="export-btn" id="btn-export">
+          <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.8">
+            <path d="M10 13V3M6 9l4 4 4-4"/><path d="M3 15v1a1 1 0 001 1h12a1 1 0 001-1v-1"/>
+          </svg>
+          Export GeoJSON
+        </button>
+      </div>
     </section>
 
     <footer class="sidebar-footer">
@@ -278,8 +276,8 @@
   <script src="https://cdn.jsdelivr.net/npm/topojson-client@3.1.0/dist/topojson-client.min.js"
           integrity="sha384-Ukv1p/xTma6P4/2bY5KzWBw+ydSpXmhCMtyciIQVDJ1RmOxtCYNMF1uXT9T63H67"
           crossorigin="anonymous"></script>
-  <script src="js/app.js?v=70"></script>
-  <script src="js/tour.js?v=3"></script>
+  <script src="js/app.js?v=73"></script>
+  <script src="js/tour.js?v=5"></script>
   <script>
     document.querySelectorAll('[data-theme-btn]').forEach((btn) => {
       btn.addEventListener('click', () => {

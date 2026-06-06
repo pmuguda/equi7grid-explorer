@@ -19,7 +19,7 @@
         href="https://cdn.jsdelivr.net/npm/maplibre-gl@5.24.0/dist/maplibre-gl.css"
         integrity="sha384-uTttxo/aOKbdE5RlD/SPzSDoDmNvGlUYPjONi2MN/b7c9HPSvW07OIuyP7uL6jxK"
         crossorigin="anonymous">
-  <link rel="stylesheet" href="css/style.css?v=26">
+  <link rel="stylesheet" href="css/style.css?v=27">
   <link rel="stylesheet" href="css/tour.css?v=4">
 </head>
 <body>
@@ -28,7 +28,20 @@
   <aside id="sidebar">
 
     <header class="sidebar-header">
-      <div class="logo-mark">E7</div>
+      <div class="logo-mark" aria-hidden="true">
+        <svg viewBox="0 0 46 46" role="img">
+          <rect class="logo-frame" x="7.5" y="7.5" width="31" height="31"/>
+          <path class="logo-grid" d="M14 23h18M23 14v18"/>
+          <path class="logo-arc" d="M14 17c5.2 3.4 12.8 3.4 18 0M14 29c5.2-3.4 12.8-3.4 18 0"/>
+          <path class="logo-zone logo-zone-a" d="M23 14l9 3v12l-9 3z"/>
+          <path class="logo-zone logo-zone-b" d="M23 14l-9 3v12l9 3z"/>
+          <path class="logo-route" d="M12 34L34 12"/>
+          <circle class="logo-node" cx="12" cy="34" r="1.8"/>
+          <circle class="logo-node" cx="23" cy="23" r="1.8"/>
+          <circle class="logo-node" cx="34" cy="12" r="1.8"/>
+          <text x="23" y="27" text-anchor="middle">7</text>
+        </svg>
+      </div>
       <div class="sidebar-brand">
         <h1>equi<span class="header-sep">·</span>7grid</h1>
         <p>Explorer for the TU Wien discrete global grid</p>

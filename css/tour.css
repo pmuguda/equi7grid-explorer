@@ -249,3 +249,215 @@
   transform: scale(1.07);
 }
 #tour-help-btn.tour-running { display: none; }
+
+/* ── Shared console tour language ─────────────────────────────── */
+#tour-overlay {
+  font-family: var(--font-mono, 'IBM Plex Mono', ui-monospace, monospace);
+}
+
+#tour-hole {
+  rx: 0;
+  ry: 0;
+}
+
+#tour-ring {
+  border: 1.5px solid var(--accent-3, oklch(0.83 0.135 82 / .45));
+  border-radius: 0;
+  box-shadow: 0 0 0 2px var(--accent-2, oklch(0.83 0.135 82 / .16));
+}
+
+#tour-tooltip {
+  width: 304px;
+  border-radius: 0;
+  padding: 0;
+  background: var(--surface, oklch(0.182 0.009 250));
+  border: 1px solid var(--border, oklch(0.31 0.012 250));
+  color: var(--text, oklch(0.93 0.008 250));
+  font-family: var(--font-mono, 'IBM Plex Mono', ui-monospace, monospace);
+  font-size: 11px;
+  box-shadow: 0 22px 54px -16px oklch(0 0 0 / .88);
+  overflow: hidden;
+}
+
+#tour-tooltip::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  background: repeating-linear-gradient(0deg, transparent 0 3px, oklch(1 0 0 / .006) 3px 4px);
+}
+
+#tour-tooltip > * { position: relative; z-index: 1; }
+
+#tour-tooltip.tt-center {
+  width: min(370px, calc(100vw - 32px));
+  text-align: left;
+}
+
+.tt-logo {
+  width: 42px;
+  height: 42px;
+  border-radius: 0;
+  border: 1px solid var(--accent, oklch(0.83 0.135 82));
+  background:
+    linear-gradient(90deg, transparent 0 47%, oklch(from var(--accent) l c h / .16) 47% 53%, transparent 53%),
+    linear-gradient(0deg, transparent 0 47%, oklch(from var(--accent) l c h / .16) 47% 53%, transparent 53%),
+    var(--bg, oklch(0.15 0.008 250));
+  color: var(--accent, oklch(0.83 0.135 82));
+  font-family: var(--font-mono, 'IBM Plex Mono', ui-monospace, monospace);
+  font-size: 10.5px;
+  letter-spacing: .08em;
+  margin: 16px 20px 0;
+}
+
+.tt-heading {
+  font-family: var(--font-cond, 'IBM Plex Sans Condensed', 'IBM Plex Mono', sans-serif);
+  font-size: 16px;
+  letter-spacing: .02em;
+  color: var(--text, oklch(0.93 0.008 250));
+  margin: 0;
+  padding: 14px 16px 0;
+}
+
+.tt-logo + .tt-heading {
+  position: absolute;
+  left: 62px;
+  top: 16px;
+  padding: 0;
+  font-size: 18px;
+}
+
+.tt-body {
+  margin: 0;
+  padding: 12px 16px 16px;
+  font-size: 11.5px;
+  letter-spacing: .015em;
+  line-height: 1.72;
+  color: var(--text-2, oklch(0.71 0.011 250));
+}
+
+.tt-body strong,
+.tt-body code,
+.tt-body kbd {
+  color: var(--text, oklch(0.93 0.008 250));
+}
+
+.tt-body a,
+.tt-credit a {
+  color: var(--accent, oklch(0.83 0.135 82));
+}
+
+.tt-credit {
+  margin: 0;
+  padding: 12px 16px;
+  border-top: 1px solid var(--border, oklch(0.31 0.012 250));
+  color: var(--muted, oklch(0.54 0.012 250));
+  font-size: 10.5px;
+  line-height: 1.6;
+}
+
+.tt-topbar {
+  margin: 0;
+  padding: 9px 13px 8px;
+  border-bottom: 1px solid var(--border, oklch(0.31 0.012 250));
+}
+
+.tt-counter {
+  border-radius: 0;
+  border: none;
+  background: transparent;
+  color: var(--accent, oklch(0.83 0.135 82));
+  padding: 0;
+  font-size: 9px;
+  letter-spacing: .16em;
+}
+
+.tt-skip {
+  color: var(--muted, oklch(0.54 0.012 250));
+  text-transform: uppercase;
+  letter-spacing: .12em;
+}
+
+.tt-skip:hover {
+  color: var(--accent, oklch(0.83 0.135 82));
+}
+
+.tt-actions {
+  padding: 0;
+  border-top: 1px solid var(--border, oklch(0.31 0.012 250));
+}
+
+.tt-actions.tt-actions-center {
+  padding: 0;
+  gap: 0;
+}
+
+.tt-btn,
+.tt-start,
+.tt-fwd,
+.tt-back {
+  height: 36px;
+  border-radius: 0;
+  border: 0;
+  border-left: 1px solid var(--border, oklch(0.31 0.012 250));
+  background: transparent;
+  color: var(--muted, oklch(0.54 0.012 250));
+  font-family: inherit;
+  font-size: 9.5px;
+  letter-spacing: .12em;
+  text-transform: uppercase;
+}
+
+.tt-btn:first-child { border-left: 0; }
+.tt-start,
+.tt-fwd {
+  background: var(--bg-3, oklch(0.225 0.011 250));
+  color: var(--text, oklch(0.93 0.008 250));
+}
+
+.tt-start:hover,
+.tt-fwd:hover,
+.tt-back:hover {
+  background: var(--accent-2, oklch(0.83 0.135 82 / .16));
+  color: var(--accent, oklch(0.83 0.135 82));
+  border-color: var(--accent, oklch(0.83 0.135 82));
+}
+
+.tt-skip-intro {
+  width: 100%;
+  height: 36px;
+  border-top: 1px solid var(--border, oklch(0.31 0.012 250));
+  color: var(--muted, oklch(0.54 0.012 250));
+  font-family: inherit;
+  font-size: 9.5px;
+  letter-spacing: .12em;
+  text-transform: uppercase;
+  text-decoration: none;
+}
+
+.tt-skip-intro:hover { color: var(--text-2, oklch(0.71 0.011 250)); }
+
+#tour-help-btn {
+  top: 64px;
+  right: 16px;
+  bottom: auto;
+  width: 32px;
+  height: 32px;
+  border-radius: 0;
+  border: 1px solid var(--border, oklch(0.31 0.012 250));
+  background: oklch(from var(--surface) l c h / .86);
+  color: var(--text-2, oklch(0.71 0.011 250));
+  box-shadow: var(--shadow, 0 18px 50px -24px oklch(0 0 0 / .85));
+  transform: none;
+}
+
+#tour-help-btn:hover {
+  color: var(--accent, oklch(0.83 0.135 82));
+  border-color: var(--accent, oklch(0.83 0.135 82));
+  transform: none;
+}
+
+body.mode-3d #tour-help-btn {
+  display: none;
+}

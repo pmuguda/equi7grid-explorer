@@ -16,6 +16,10 @@ const CONTINENT_VIEWS = {
   SA: { center: [-60, -14],  zoom: 2.5 },
 };
 
+function globeAltitudeForView(view) {
+  return 6.5 / view.zoom;
+}
+
 const CONTINENT_COLORS = {
   AF: '#e6a817', AN: '#74c476', AS: '#fd7f28',
   EU: '#4393c3', NA: '#d9534f', OC: '#20b2aa', SA: '#9b59b6',
@@ -453,10 +457,12 @@ function onMapLoad() {
       map.getSource('zones-seam').setData(seam);
       zonesGeoJSON = data;
       // Pre-compute globe zone data once — zones never change
-      zonePaths = featuresToPaths(data.features, f => ({
+      const globeZones = data.features.map(f => decimateFeature(f, 5));
+      zonePaths = featuresToPaths(globeZones, f => ({
         id: f.properties.id, color: f.properties.color, kind: 'zone',
       }), 0.015);
-      zonesPolygons = prepareGlobeZones(data.features);
+      zonesPolygons = prepareGlobeZones(globeZones);
+      if (viewIs3D) refreshGlobeData();
     })
     .catch(err => console.error('Failed to load zones:', err));
 }
@@ -497,7 +503,7 @@ function selectContinent(id) {
     const v = CONTINENT_VIEWS[id];
     // Derive a globe altitude from the 2D zoom so framing matches (bigger
     // continents → higher altitude). Lower altitude = more zoomed in.
-    if (v) globeInstance.pointOfView({ lat: v.center[1], lng: v.center[0], altitude: 4.5 / v.zoom }, 500);
+    if (v) globeInstance.pointOfView({ lat: v.center[1], lng: v.center[0], altitude: globeAltitudeForView(v) }, 500);
   } else {
     zoomToContinent(id);
   }
@@ -564,15 +570,18 @@ async function loadTiles(continent, tiling) {
 
     statTotal.textContent = state.tilesData.features.length.toLocaleString();
     statsSection.hidden = false;
-    computeLandTiles();
+    hideLoader();
 
-    // Re-apply AOI if exists
-    if (state.aoi) applyAOI(state.aoi, false);
-    // Sync tile data to globe if in 3D mode
-    refreshGlobeData();
+    // Let the tile grid paint before slower follow-up calculations.
+    setTimeout(() => {
+      computeLandTiles();
+      // Re-apply AOI if exists
+      if (state.aoi) applyAOI(state.aoi, false);
+      // Sync tile data to globe if in 3D mode
+      refreshGlobeData();
+    }, 0);
   } catch (err) {
     console.error('Tile load error:', err);
-  } finally {
     hideLoader();
   }
 }
@@ -1284,6 +1293,29 @@ function densifyFeature(feat, maxStep = 1.5) {
            geometry: { type: g.type, coordinates: coords } };
 }
 
+/* Use lighter copies for globe-only zone rendering. The source GeoJSON stays
+ * untouched for MapLibre, hit testing, and data exports. */
+function decimateFeature(feat, step = 5) {
+  const decimateRing = ring => {
+    if (ring.length <= 12 || step <= 1) return ring;
+    const out = [];
+    for (let i = 0; i < ring.length - 1; i += step) out.push(ring[i]);
+    const last = ring[ring.length - 1];
+    const tail = out[out.length - 1];
+    if (!tail || tail[0] !== last[0] || tail[1] !== last[1]) out.push(last);
+    return out;
+  };
+  const g = feat.geometry;
+  if (!g || !['Polygon', 'MultiPolygon'].includes(g.type)) return feat;
+  const mapPoly = poly => poly.map(decimateRing);
+  const coords = g.type === 'Polygon' ? mapPoly(g.coordinates) : g.coordinates.map(mapPoly);
+  return {
+    type: 'Feature',
+    properties: { ...(feat.properties || {}) },
+    geometry: { type: g.type, coordinates: coords },
+  };
+}
+
 /* Combine cached base paths with any live draw-preview paths and push to the
  * globe in a single call (avoids a full refreshGlobeData on every mousemove). */
 let globeBasePaths    = [];
@@ -1508,7 +1540,7 @@ function initGlobe() {
     // leaves flat triangles that dip below the sphere at grazing angles (black
     // slivers). 1° makes each cap follow the curvature — clean fills at any
     // angle. Only 7 polygons, so the extra geometry is negligible.
-    .polygonCapCurvatureResolution(1)
+    .polygonCapCurvatureResolution(3)
     .polygonsTransitionDuration(0)
     .polygonLabel(f => {
       // Escape interpolated values — defense-in-depth so this HTML label can
@@ -1627,6 +1659,7 @@ $('btn-2d').addEventListener('click', () => {
   viewIs3D = false;
   $('btn-2d').classList.add('active');
   $('btn-3d').classList.remove('active');
+  document.body.classList.remove('mode-3d');
 
   // Re-enable AOI tools — drawing/upload only works on the 2D map
   $('aoi-toolbar').style.display = '';
@@ -1651,6 +1684,7 @@ $('btn-3d').addEventListener('click', () => {
   viewIs3D = true;
   $('btn-3d').classList.add('active');
   $('btn-2d').classList.remove('active');
+  document.body.classList.add('mode-3d');
 
   // AOI tools are 2D-only — cancel any active draw and hide the toolbar.
   // (An already-drawn AOI still displays on the globe.)
@@ -1673,10 +1707,16 @@ $('btn-3d').addEventListener('click', () => {
     loadCountryBorders();
   }
 
+  requestAnimationFrame(() => {
+    if (!globeInstance || !viewIs3D) return;
+    const c = $('globe-wrap');
+    globeInstance.width(c.offsetWidth).height(c.offsetHeight);
+  });
+
   // If a continent was already selected, fly globe to it
   if (state.continent) {
     const v = CONTINENT_VIEWS[state.continent];
-    if (v) globeInstance?.pointOfView({ lat: v.center[1], lng: v.center[0], altitude: 4.5 / v.zoom }, 500);
+    if (v) globeInstance?.pointOfView({ lat: v.center[1], lng: v.center[0], altitude: globeAltitudeForView(v) }, 500);
   }
 });
 

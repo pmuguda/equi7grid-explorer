@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="en" data-theme="dark">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -12,12 +12,15 @@
        every CDN asset below. If deployed behind a server that can set headers,
        a tuned CSP (ideally report-only first) is the better place for it. -->
   <title>Equi7Grid Explorer</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans+Condensed:wght@600;700&display=swap" rel="stylesheet">
   <link rel="stylesheet"
         href="https://cdn.jsdelivr.net/npm/maplibre-gl@5.24.0/dist/maplibre-gl.css"
         integrity="sha384-uTttxo/aOKbdE5RlD/SPzSDoDmNvGlUYPjONi2MN/b7c9HPSvW07OIuyP7uL6jxK"
         crossorigin="anonymous">
-  <link rel="stylesheet" href="css/style.css?v=22">
-  <link rel="stylesheet" href="css/tour.css?v=2">
+  <link rel="stylesheet" href="css/style.css?v=26">
+  <link rel="stylesheet" href="css/tour.css?v=4">
 </head>
 <body>
 
@@ -26,21 +29,28 @@
 
     <header class="sidebar-header">
       <div class="logo-mark">E7</div>
-      <div>
-        <h1>Equi7Grid Explorer</h1>
-        <p>Discrete global grid system by TU Wien</p>
+      <div class="sidebar-brand">
+        <h1>equi<span class="header-sep">·</span>7grid</h1>
+        <p>Explorer for the TU Wien discrete global grid</p>
+      </div>
+      <div class="header-right">
+        <div class="theme-toggle" role="group" aria-label="Theme">
+          <button data-theme-btn="dark" aria-pressed="true">DARK</button>
+          <button data-theme-btn="paper" aria-pressed="false">PAPER</button>
+        </div>
       </div>
     </header>
 
     <!-- No-selection hint -->
     <div id="no-selection-hint" class="panel-section">
+      <div class="mod-h"><span class="ix">00</span><span class="ttl">Start</span><span class="rule"></span></div>
       <p class="section-hint" style="margin-bottom:0">Click a colored zone on the map to select a continent.</p>
     </div>
 
 
     <!-- TILING SYSTEM -->
     <section class="panel-section" id="tiling-section" hidden>
-      <h2 class="section-title">1 · Tiling System</h2>
+      <h2 class="section-title"><span class="ix">01</span><span class="ttl">Tiling System</span><span class="rule"></span></h2>
       <div class="seg-toggle" id="tiling-toggle" role="group" aria-label="Tiling system">
         <button class="seg-btn active" data-tiling="T6"><strong>T6</strong><em>600 km</em></button>
         <button class="seg-btn" data-tiling="T3"><strong>T3</strong><em>300 km</em></button>
@@ -50,7 +60,7 @@
 
     <!-- STATS — shown immediately when zone is selected -->
     <section class="panel-section" id="stats-section" hidden>
-      <h2 class="section-title">2 · Tile Results</h2>
+      <h2 class="section-title"><span class="ix">02</span><span class="ttl">Tile Results</span><span class="rule"></span></h2>
 
       <p class="stats-group-label" id="zone-group-label">Selected E7 zone</p>
       <div class="stats-grid">
@@ -111,6 +121,7 @@
 
     <!-- EXPORT -->
     <section class="panel-section" id="export-section" hidden>
+      <div class="mod-h"><span class="ix">03</span><span class="ttl">Export</span><span class="rule"></span></div>
       <button class="export-btn" id="btn-export">
         <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.8">
           <path d="M10 13V3M6 9l4 4 4-4"/><path d="M3 15v1a1 1 0 001 1h12a1 1 0 001-1v-1"/>
@@ -120,15 +131,24 @@
     </section>
 
     <footer class="sidebar-footer">
-      <a class="kofi-btn" href="https://ko-fi.com/pavan_muguda" target="_blank" rel="noopener noreferrer" title="Support this project on Ko-fi">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
-          <path d="M4 8h13v5a4 4 0 0 1-4 4H8a4 4 0 0 1-4-4V8z"/>
-          <path d="M17 9h2.5a2.5 2.5 0 0 1 0 5H17"/>
-          <path d="M7 3v2M11 3v2"/>
-        </svg>
-        Buy me a coffee
-      </a>
-      <span class="footer-author">Made by <a class="author-name" href="https://pmuguda.github.io/" target="_blank" rel="noopener noreferrer">Pavan Muguda Sanjeevamurthy</a></span>
+      <div class="footer-meta">
+        <span class="footer-author">By <a class="author-name" href="https://pmuguda.github.io/" target="_blank" rel="noopener noreferrer">Pavan Muguda Sanjeevamurthy</a></span>
+        <span class="footer-icons">
+          <a class="footer-icon-link" href="https://github.com/pmuguda/equi7grid-explorer" target="_blank" rel="noopener noreferrer" aria-label="GitHub" title="GitHub">
+            <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+              <path d="M12 2C6.477 2 2 6.477 2 12c0 4.418 2.865 8.166 6.839 9.489.5.092.682-.217.682-.482 0-.237-.009-.868-.013-1.703-2.782.605-3.369-1.342-3.369-1.342-.454-1.155-1.11-1.463-1.11-1.463-.908-.62.069-.608.069-.608 1.003.07 1.531 1.032 1.531 1.032.892 1.53 2.341 1.088 2.91.832.092-.647.35-1.088.636-1.338-2.22-.253-4.555-1.113-4.555-4.951 0-1.093.39-1.988 1.029-2.688-.103-.253-.446-1.272.098-2.65 0 0 .84-.27 2.75 1.026A9.564 9.564 0 0 1 12 6.844a9.59 9.59 0 0 1 2.504.337c1.909-1.296 2.747-1.027 2.747-1.027.546 1.379.202 2.398.1 2.651.64.7 1.028 1.595 1.028 2.688 0 3.848-2.339 4.695-4.566 4.943.359.309.678.92.678 1.855 0 1.338-.012 2.419-.012 2.747 0 .268.18.58.688.482A10.019 10.019 0 0 0 22 12c0-5.523-4.477-10-10-10z"/>
+            </svg>
+          </a>
+          <a class="footer-icon-link" href="https://ko-fi.com/pavan_muguda" target="_blank" rel="noopener noreferrer" aria-label="Ko-fi" title="Ko-fi">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <path d="M4 8h13v5a4 4 0 0 1-4 4H8a4 4 0 0 1-4-4V8z"/>
+              <path d="M17 9h2.5a2.5 2.5 0 0 1 0 5H17"/>
+              <path d="M7 3v2M11 3v2"/>
+            </svg>
+          </a>
+        </span>
+      </div>
+      <a class="footer-support" href="https://ko-fi.com/pavan_muguda" target="_blank" rel="noopener noreferrer">if it helped, support me on Ko-fi</a>
       <span class="footer-credit">Grid data: <a href="https://github.com/TUW-GEO/Equi7Grid" target="_blank" rel="noopener noreferrer">TUW-GEO/Equi7Grid</a></span>
     </footer>
   </aside>
@@ -245,7 +265,17 @@
   <script src="https://cdn.jsdelivr.net/npm/topojson-client@3.1.0/dist/topojson-client.min.js"
           integrity="sha384-Ukv1p/xTma6P4/2bY5KzWBw+ydSpXmhCMtyciIQVDJ1RmOxtCYNMF1uXT9T63H67"
           crossorigin="anonymous"></script>
-  <script src="js/app.js?v=66"></script>
+  <script src="js/app.js?v=70"></script>
   <script src="js/tour.js?v=3"></script>
+  <script>
+    document.querySelectorAll('[data-theme-btn]').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        const theme = btn.dataset.themeBtn;
+        document.documentElement.dataset.theme = theme;
+        document.querySelectorAll('[data-theme-btn]').forEach((b) =>
+          b.setAttribute('aria-pressed', String(b === btn)));
+      });
+    });
+  </script>
 </body>
 </html>

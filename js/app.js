@@ -29,6 +29,12 @@ const CONTINENT_COLORS = {
 // the 3D globe (city/road/place labels removed; only our own zone & tile
 // labels and the white country borders remain — homogeneous with 3D).
 const MAP_STYLE = 'https://basemaps.cartocdn.com/gl/dark-matter-nolabels-gl-style/style.json';
+const GOOGLE_SATELLITE_TILES = [
+  'https://mt0.google.com/vt/lyrs=s&x={x}&y={y}&z={z}',
+  'https://mt1.google.com/vt/lyrs=s&x={x}&y={y}&z={z}',
+  'https://mt2.google.com/vt/lyrs=s&x={x}&y={y}&z={z}',
+  'https://mt3.google.com/vt/lyrs=s&x={x}&y={y}&z={z}',
+];
 
 /* ── State ── */
 let state = {
@@ -38,6 +44,7 @@ let state = {
   aoi:         null,      // GeoJSON Feature (Polygon)
   intersecting: new Set(),
   drawMode:    null,      // null | 'bbox' | 'polygon'
+  basemap:     'dark',    // 'dark' | 'satellite'
   bboxAnchor:  null,      // [lng, lat] first corner for bbox
   polyVerts:   [],        // accumulated polygon vertices
   longName:    true,      // tile-name format: true = EU500M_E006N006T6, false = E006N006T6
@@ -140,9 +147,49 @@ function expandTray(selector) {
 }
 window.expandTray = expandTray;
 
+function setBasemap(mode) {
+  state.basemap = mode === 'satellite' ? 'satellite' : 'dark';
+  const satelliteVisible = state.basemap === 'satellite';
+
+  if (map?.getLayer('google-satellite')) {
+    map.setLayoutProperty('google-satellite', 'visibility', satelliteVisible ? 'visible' : 'none');
+  }
+
+  document.querySelectorAll('.layer-menu-item').forEach(btn => {
+    const active = btn.dataset.basemap === state.basemap;
+    btn.classList.toggle('active', active);
+    btn.setAttribute('aria-pressed', String(active));
+  });
+}
+
+function setLayersMenu(open) {
+  const menu = $('layers-menu');
+  const btn = $('btn-layers-menu');
+  if (!menu || !btn) return;
+  menu.hidden = !open;
+  btn.setAttribute('aria-expanded', String(open));
+}
+
 document.querySelectorAll('.tray-section .tray-toggle').forEach(btn => {
   const tray = btn.closest('.tray-section');
   btn.addEventListener('click', () => setTrayCollapsed(tray, !tray.classList.contains('is-collapsed')));
+});
+
+$('btn-layers-menu')?.addEventListener('click', e => {
+  e.stopPropagation();
+  setLayersMenu($('layers-menu')?.hidden ?? true);
+});
+
+document.querySelectorAll('.layer-menu-item').forEach(btn => {
+  btn.addEventListener('click', e => {
+    e.stopPropagation();
+    setBasemap(btn.dataset.basemap);
+    setLayersMenu(false);
+  });
+});
+
+document.addEventListener('click', e => {
+  if (!$('layers-menu-wrap')?.contains(e.target)) setLayersMenu(false);
 });
 
 /* ── Map ── */
@@ -163,6 +210,13 @@ function initMap() {
 
 function onMapLoad() {
   /* ── GeoJSON sources ── */
+  map.addSource('google-satellite', {
+    type: 'raster',
+    tiles: GOOGLE_SATELLITE_TILES,
+    tileSize: 256,
+    attribution: 'Imagery © Google',
+  });
+
   // Canonical Equi7Grid 7-zone partition (spherical Voronoi based on AEQD
   // origins).  Every point on Earth belongs to exactly one zone.
   map.addSource('zones', {
@@ -205,6 +259,19 @@ function onMapLoad() {
   // No country-border overlay in 2D — the CARTO basemap already renders
   // subtle country borders. Adding white lines on top caused very visible
   // "horizontal lines" across zone fills (many African borders follow parallels).
+
+  map.addLayer({
+    id: 'google-satellite',
+    type: 'raster',
+    source: 'google-satellite',
+    layout: { visibility: 'none' },
+    paint: {
+      'raster-opacity': 1,
+      'raster-saturation': -0.12,
+      'raster-contrast': 0.06,
+    },
+  });
+  setBasemap(state.basemap);
 
   /* ── Graticule gridlines (sit on the basemap, under the zones) ──
    * Major lines (every 5 ticks) are brighter/thicker than minor ones. */

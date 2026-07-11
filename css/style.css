@@ -765,6 +765,53 @@ body.sidebar-collapsed #topbar-left { left: 34px; }
 .view-toggle-pill.active { background: var(--accent); color: #fff; }
 .view-toggle-pill:not(.active):hover { color: var(--text); background: rgba(255,255,255,0.07); }
 
+#layers-menu-wrap {
+  position: relative;
+}
+
+#layers-menu {
+  position: absolute;
+  top: calc(100% + 6px);
+  left: 0;
+  min-width: 96px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  box-shadow: 0 8px 24px rgba(0,0,0,0.45);
+  z-index: 25;
+}
+
+.layer-menu-item {
+  width: 100%;
+  min-height: 30px;
+  padding: 0 10px;
+  border: 0;
+  border-bottom: 1px solid var(--border);
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: .12em;
+  text-transform: uppercase;
+}
+
+.layer-menu-item:last-child { border-bottom: 0; }
+.layer-menu-item:hover { color: var(--text); background: rgba(255,255,255,0.06); }
+.layer-menu-item.active {
+  color: var(--accent);
+  background: rgba(88,166,255,0.10);
+}
+.layer-menu-item.active::after {
+  content: "";
+  width: 5px;
+  height: 5px;
+  background: currentColor;
+}
+body.mode-3d #layers-menu-wrap { display: none; }
+
 /* Country-mode pill (labelled toggle next to 2D/3D) */
 .topbar-pill {
   display: flex;
